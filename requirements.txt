@@ -1,0 +1,5 @@
+# requirements.txt
+websockets==12.0
+pynput==1.7.6
+# evdev-binary is a pre-compiled fallback if evdev source build still fails
+evdev-binary; sys_platform == "linux"
