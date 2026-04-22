@@ -33,10 +33,6 @@ a = Analysis(
         # Exclude heavy stdlib modules we don't need
         "tkinter",
         "unittest",
-        "email",
-        "html",
-        "http.client",
-        "urllib",
         "xml",
         "xmlrpc",
         "pydoc",
