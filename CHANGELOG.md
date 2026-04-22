@@ -5,6 +5,65 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.0.0] — 2026-04-22 — Major Feature Release
+
+### Added
+- **Security & Authentication**:
+  - 4-digit PIN authentication for secure connections
+  - HTTPS/WSS support with auto-generated self-signed certificates
+  - Connection deduplication preventing duplicate browser tabs
+
+- **Advanced Input Control**:
+  - Mouse trackpad with touch gestures (move, click, scroll)
+  - Speed-adjustable mouse movement (0.1x - 5.0x)
+  - Full modifier key support (Shift, Ctrl, Alt combinations)
+  - Function keys F1-F12 in scrollable interface
+
+- **Cross-Device Features**:
+  - Clipboard synchronization (phone → laptop)
+  - Multi-device support with device naming
+  - Real-time device connection tracking and status
+
+- **User Experience**:
+  - Dark/light theme toggle with localStorage persistence
+  - Tab-based UI: Keyboard, Mouse, Clipboard, Devices tabs
+  - QR code terminal display for instant URL sharing
+  - Responsive design optimized for mobile screens
+
+- **CLI & Configuration**:
+  - Command-line arguments: `--ws-port`, `--http-port`, `--https`, `--no-pin`, `--mouse-speed`
+  - Environment variable configuration for all settings
+  - Type hints throughout codebase for maintainability
+
+- **Developer Features**:
+  - Unit tests with `unittest` for core functionality
+  - Connection metrics and active device counting
+  - Comprehensive error handling and logging
+
+- **Dependencies**:
+  - `qrcode` for terminal QR code generation
+  - `cryptography` for SSL certificate generation
+  - `pyperclip` for cross-platform clipboard access
+
+### Changed
+- **UI Redesign**: Complete interface overhaul with modern tabbed layout
+- **Architecture**: Enhanced WebSocket protocol with authentication and device management
+- **Dependencies**: Added optional libraries for advanced features (fallback if not installed)
+- **Configuration**: All settings now configurable via CLI args or environment variables
+
+### Fixed
+- **PyInstaller Builds**: Fixed module exclusion issues for standalone executables
+- **Connection Handling**: Improved WebSocket reconnection and error recovery
+- **Mobile Compatibility**: Better touch event handling and gesture recognition
+
+### Architecture
+- **Message Protocol**: Extended WebSocket messages for mouse, clipboard, and device management
+- **Security Model**: PIN-based authentication with optional HTTPS encryption
+- **Multi-Device**: Registry-based device tracking with real-time updates
+- **Async Processing**: Enhanced asyncio patterns for mouse and clipboard operations
+
+---
+
 ## [2.1.0] — 2026-04-22 — First Public Release
 
 ### Added

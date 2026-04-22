@@ -1,7 +1,6 @@
-# 📱→💻 PhoneKey
+# 📱→💻 PhoneKey v3.0.0
 
-> Use your phone as a wireless keyboard for your laptop — lightweight,
-> real-time, and zero-install on the phone side.
+> Advanced phone-as-keyboard with mouse control, clipboard sync, and secure connections — lightweight, real-time, zero-install on phone.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://python.org)
@@ -9,16 +8,21 @@
 
 ---
 
-## 🧠 Why PhoneKey?
+## 🧠 Why PhoneKey v3.0.0?
 
-| Problem | PhoneKey Fix |
+| Problem | PhoneKey v3.0.0 Solution |
 |---|---|
-| Forgot physical keyboard | Use phone browser as keyboard |
-| Other tools show "keeyy" duplicates | Sentinel + async queue pattern |
-| Other tools eat laptop RAM | ~15 MB Python process only |
-| Other tools require app install | Pure browser — no app needed |
-| slow reflection on screen | WebSocket over LAN (<5ms latency) |
-| Multiple tabs cause connection conflicts | Tab-based deduplication (one tab per device) |
+| Forgot physical keyboard | Full keyboard with modifier keys & function keys |
+| Need mouse control | Touch trackpad with gestures (move, click, scroll) |
+| Clipboard between devices | Phone-to-laptop clipboard sync |
+| Multiple device management | Device naming & real-time connection tracking |
+| Security concerns | 4-digit PIN authentication + HTTPS/WSS |
+| Hard to share URL | QR code terminal display for instant scanning |
+| Other tools show duplicates | Sentinel pattern + tab deduplication |
+| Other tools eat laptop RAM | ~20 MB Python process with all features |
+| Other tools require app install | Pure browser — no downloads needed |
+| Slow response | WebSocket over LAN (<5ms latency) |
+| Theme preferences | Dark/light mode toggle with persistence |
 
 ---
 
@@ -46,14 +50,51 @@
 
 | Layer | Technology | Why |
 |---|---|---|
-| Server | Python 3.8+ | Lightweight, cross-platform |
-| Key Injection | `pynput 1.7.6` | Works on Windows/macOS/Linux |
-| WebSocket | `websockets 12.0` (asyncio) | Non-blocking, minimal overhead |
+| Server | Python 3.8+ | Lightweight, cross-platform async |
+| Key Injection | `pynput 1.7.6` | OS-level keyboard/mouse control |
+| Mouse Control | `pynput 1.7.6` | Touch trackpad with gestures |
+| WebSocket | `websockets 12.0` (asyncio) | Real-time bidirectional comms |
+| SSL/TLS | `cryptography 42.0.5` | Auto-generated HTTPS certificates |
+| QR Codes | `qrcode 7.4.2` | Terminal QR for easy URL sharing |
+| Clipboard | `pyperclip 1.8.2` | Cross-device clipboard sync |
 | Key Queue | `asyncio.Queue` | Prevents fast-typing key drops |
-| HTTP | `http.server` (stdlib) | Zero extra dependencies |
-| Client | Vanilla HTML5/CSS3/ES6 | No framework, no app install |
-| Input Fix | Sentinel + `input` event | Fixes mobile `keydown:229` bug |
+| HTTP | `http.server` (stdlib) | Built-in web server |
+| Client | Vanilla HTML5/CSS3/ES6 | No frameworks, pure browser |
+| Input Fix | Sentinel + `input` event | Mobile keyboard compatibility |
 | Testing | `unittest` (stdlib) | Unit tests for core logic |
+
+---
+
+## 🚀 v3.0.0 New Features
+
+### 🔐 Security & Authentication
+- **4-Digit PIN**: Secure connection with optional PIN authentication
+- **HTTPS/WSS**: Auto-generated self-signed certificates for encrypted connections
+- **Connection Deduplication**: Prevents duplicate connections from same browser tab
+
+### 🖱️ Advanced Input Control
+- **Mouse Trackpad**: Touch gestures for cursor movement, clicking, and scrolling
+- **Modifier Keys**: Full support for Shift, Ctrl, Alt combinations
+- **Function Keys**: F1-F12 with scrollable interface
+- **Speed Control**: Adjustable mouse movement sensitivity
+
+### 📋 Cross-Device Features
+- **Clipboard Sync**: Copy text from phone and paste on laptop instantly
+- **Multi-Device Support**: Connect multiple phones simultaneously with device naming
+- **Real-time Updates**: Live device list and connection status
+
+### 🎨 User Experience
+- **Dark/Light Theme**: Persistent theme toggle with system preference detection
+- **Tab-Based UI**: Organized interface (Keyboard, Mouse, Clipboard, Devices)
+- **QR Code Display**: Terminal QR codes for instant URL sharing
+- **Responsive Design**: Optimized for all mobile screen sizes
+
+### 🛠️ Developer Features
+- **CLI Arguments**: Custom ports, HTTPS mode, PIN disable, mouse speed
+- **Environment Config**: All settings configurable via environment variables
+- **Type Hints**: Full Python type annotations for maintainability
+- **Unit Tests**: Test coverage for core functionality
+- **Connection Metrics**: Active connection counting and logging
 
 ---
 
@@ -147,8 +188,29 @@ python -m unittest test_server.py
 
 ### 7. Run the server
 
+#### Basic Usage (HTTP, PIN enabled)
 ```bash
 python server.py
+```
+
+#### HTTPS Mode (recommended for iOS Safari)
+```bash
+python server.py --https
+```
+
+#### Custom Configuration
+```bash
+# Custom ports
+python server.py --ws-port 9000 --http-port 9001
+
+# Disable PIN for home network
+python server.py --no-pin
+
+# Adjust mouse speed (0.1-5.0)
+python server.py --mouse-speed 2.5
+
+# Full secure setup
+python server.py --https --ws-port 9443 --http-port 9444 --mouse-speed 1.5
 ```
 
 ### 8. Open on your phone
@@ -157,12 +219,23 @@ The terminal will show:
 
 ```
 ╔══════════════════════════════════════════════╗
-║           📱  PhoneKey  v2.1.0  💻           ║
-╠══════════════════════════════════════════════╣
-║  OS detected : Windows                       ║
-║  Open on your phone:                         ║
-║  👉  http://192.168.0.104:8080               ║
-╚══════════════════════════════════════════════╝
+║         📱  PhoneKey  v3.0.0  💻            ║
+╠══════════════════════════════════════════════════╣
+║  OS      : Windows                              ║
+║  Mode    : HTTPS/WSS 🔒                         ║
+║  PIN: 4827                                      ║
+╠══════════════════════════════════════════════════╣
+║  Open on your phone:                             ║
+║  👉  https://192.168.0.104:8080                 ║
+╚══════════════════════════════════════════════════╝
+
+  📷  Scan QR code with your phone camera:
+
+  ██████████████  ██  ██████████████
+  ██          ██      ██          ██
+  ... (QR code) ...
+
+  🔐  When prompted on phone, enter PIN:  4827
 ```
 
 Open that URL in your phone browser → tap "Tap here to start typing" → type!
