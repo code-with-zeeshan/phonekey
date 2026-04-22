@@ -1,7 +1,21 @@
+# Virtual environment
 venv/
+.venv/
+
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+
+# PhoneKey runtime files
+.phonekey.pid
+
+# OS files
 .DS_Store
 Thumbs.db
-*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
