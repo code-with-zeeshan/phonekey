@@ -344,7 +344,7 @@ const statusText    = document.getElementById("status-text");
 // ── Tab ID for deduplication ───────────────────────────────────────────────────
 let tabId = sessionStorage.getItem('phonekey_tab_id');
 if (!tabId) {
-    tabId = crypto.randomUUID();
+    tabId = (crypto.randomUUID) ? crypto.randomUUID() : ('tab-' + Date.now() + '-' + Math.random());
     sessionStorage.setItem('phonekey_tab_id', tabId);
 }
 
@@ -399,11 +399,19 @@ function connect() {
   setStatus("connecting", "Connecting…");
   socket = new WebSocket(WS_URL);
   socket.addEventListener("open",  () => {
+    console.log("WS open, sending register");
     // Send tab ID for deduplication
     socket.send(JSON.stringify({ action: "register", tab_id: tabId }));
+    console.log("Register sent");
     reconnectDelay = RECONNECT_BASE_MS;
     setStatus("connected", "Connected ✓");
     clearTimeout(reconnectTimer);
+  });
+  socket.addEventListener("error", (e) => {
+    console.log("WS error", e);
+  });
+  socket.addEventListener("close", (e) => {
+    console.log("WS close", e);
   });
   socket.addEventListener("close", () => {
     setStatus("disconnected", "Reconnecting…");

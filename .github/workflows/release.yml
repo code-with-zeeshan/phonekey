@@ -22,10 +22,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
@@ -42,7 +42,7 @@ jobs:
         run: mv dist/phonekey.exe dist/phonekey-windows.exe
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: phonekey-windows
           path: dist/phonekey-windows.exe
@@ -116,10 +116,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all artifacts
+      - name: Download Windows binary
         uses: actions/download-artifact@v4
         with:
-          path: dist/
+          name: phonekey-windows
+
+      - name: Download macOS binary
+        uses: actions/download-artifact@v4
+        with:
+          name: phonekey-macos
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: phonekey-linux
 
       - name: Create Release with binaries
         uses: softprops/action-gh-release@v2
@@ -129,6 +139,6 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            dist/phonekey-windows/phonekey-windows.exe
-            dist/phonekey-macos/phonekey-macos
-            dist/phonekey-linux/phonekey-linux
+            dist/phonekey-windows.exe
+            dist/phonekey-macos
+            dist/phonekey-linux
