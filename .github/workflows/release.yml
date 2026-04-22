@@ -1,0 +1,134 @@
+# .github/workflows/release.yml
+# Automatically builds PhoneKey binaries for Windows, macOS, and Linux
+# and attaches them to a GitHub Release whenever you push a version tag.
+#
+# Trigger: git tag v2.1.0 && git push origin v2.1.0
+
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"      # Triggers on tags like v2.1.0, v2.2.0, etc.
+
+permissions:
+  contents: write   # Required to create GitHub Releases
+
+jobs:
+
+  # ── Build Windows .exe ──────────────────────────────────────────────────────
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller==6.3.0
+
+      - name: Build executable
+        run: pyinstaller phonekey.spec
+
+      - name: Rename binary with platform suffix
+        run: mv dist/phonekey.exe dist/phonekey-windows.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: phonekey-windows
+          path: dist/phonekey-windows.exe
+
+  # ── Build macOS binary ──────────────────────────────────────────────────────
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller==6.3.0
+
+      - name: Build executable
+        run: pyinstaller phonekey.spec
+
+      - name: Rename binary
+        run: mv dist/phonekey dist/phonekey-macos
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phonekey-macos
+          path: dist/phonekey-macos
+
+  # ── Build Linux binary ──────────────────────────────────────────────────────
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            linux-headers-$(uname -r) \
+            python3-dev gcc
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller==6.3.0
+
+      - name: Build executable
+        run: pyinstaller phonekey.spec
+
+      - name: Rename binary
+        run: mv dist/phonekey dist/phonekey-linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phonekey-linux
+        path: dist/phonekey-linux
+
+  # ── Create GitHub Release ───────────────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+      - name: Create Release with binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "PhoneKey ${{ github.ref_name }}"
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false
+          files: |
+            dist/phonekey-windows/phonekey-windows.exe
+            dist/phonekey-macos/phonekey-macos
+            dist/phonekey-linux/phonekey-linux

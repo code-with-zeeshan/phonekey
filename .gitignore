@@ -1,21 +1,32 @@
-# Virtual environment
+# ── Python ───────────────────────
 venv/
 .venv/
-
-# Python cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.pdb
+*.egg-info/
+.eggs/
+*.egg
 
-# PhoneKey runtime files
+# ── PyInstaller ──────────────────
+build/
+dist/
+*.spec.bak
+
+# ── PhoneKey runtime ─────────────
 .phonekey.pid
 
-# OS files
+# ── OS ───────────────────────────
 .DS_Store
 Thumbs.db
+Desktop.ini
 
-# IDE
+# ── IDE ──────────────────────────
 .vscode/
 .idea/
 *.swp
+*.swo
+.env
+.env.local

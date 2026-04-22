@@ -31,6 +31,7 @@ import sys
 import threading
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
+from typing import Dict, Set
 
 import websockets
 
@@ -47,13 +48,36 @@ logger = logging.getLogger("phonekey")
 # ─────────────────────────────────────────────
 #  Constants
 # ─────────────────────────────────────────────
-WS_PORT          = 8765
-HTTP_PORT        = 8080
-LOCK_PORT        = 18765          # Internal socket lock port — not exposed to network
-CLIENT_DIR       = Path(__file__).parent / "client"
-KEY_INJECT_DELAY = 0.012          # 12ms between keystrokes — prevents Win32 SendInput drops
-WS_PING_INTERVAL = 30             # WebSocket keepalive ping interval (seconds)
-WS_PING_TIMEOUT  = 60             # WebSocket keepalive pong timeout (seconds)
+# ─────────────────────────────────────────────
+#  Path Resolution — works in both:
+#    1. Normal:  python server.py (development)
+#    2. Bundled: ./phonekey (PyInstaller executable)
+#
+#  PyInstaller sets sys._MEIPASS to the temp folder
+#  where it extracts bundled files at runtime.
+#  In normal mode sys._MEIPASS doesn't exist,
+#  so we fall back to __file__'s parent directory.
+# ─────────────────────────────────────────────
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    # Running as PyInstaller bundle
+    BASE_DIR   = Path(sys._MEIPASS)
+else:
+    # Running as normal Python script
+    BASE_DIR   = Path(__file__).parent
+
+CLIENT_DIR = BASE_DIR / "client"
+
+# ─────────────────────────────────────────────
+#  Configuration (via environment variables)
+# ─────────────────────────────────────────────
+CONFIG = {
+    "ws_port": int(os.environ.get("PHONEKEY_WS_PORT", 8765)),
+    "http_port": int(os.environ.get("PHONEKEY_HTTP_PORT", 8080)),
+    "lock_port": int(os.environ.get("PHONEKEY_LOCK_PORT", 18765)),
+    "key_inject_delay": float(os.environ.get("PHONEKEY_KEY_DELAY", 0.012)),
+    "ws_ping_interval": int(os.environ.get("PHONEKEY_PING_INTERVAL", 30)),
+    "ws_ping_timeout": int(os.environ.get("PHONEKEY_PING_TIMEOUT", 60)),
+}
 
 # ─────────────────────────────────────────────
 #  Socket-Based Instance Lock
@@ -80,7 +104,7 @@ def _acquire_instance_lock() -> None:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
     try:
-        sock.bind(("127.0.0.1", LOCK_PORT))
+        sock.bind(("127.0.0.1", CONFIG["lock_port"]))
         sock.listen(1)
         _lock_socket = sock
     except OSError as exc:
@@ -216,8 +240,14 @@ SPECIAL_KEY_MAP: dict[str, Key] = {
 # ─────────────────────────────────────────────
 key_queue: asyncio.Queue = asyncio.Queue()
 
+# ─────────────────────────────────────────────
+#  Active Connections Tracking
+# ─────────────────────────────────────────────
+active_tab_ids: Set[str] = set()
+connection_count: int = 0
 
-def _inject_now(data: dict) -> None:
+
+def _inject_now(data: Dict[str, str]) -> None:
     """Immediately injects one keystroke via pynput."""
     action: str    = data.get("action", "")
     key_value: str = data.get("key", "")
@@ -248,19 +278,42 @@ async def key_worker() -> None:
         data = await key_queue.get()
         _inject_now(data)
         key_queue.task_done()
-        await asyncio.sleep(KEY_INJECT_DELAY)
+        await asyncio.sleep(CONFIG["key_inject_delay"])
 
 
 # ─────────────────────────────────────────────
 #  WebSocket Handler
 # ─────────────────────────────────────────────
 
-async def ws_handler(websocket) -> None:
+async def ws_handler(websocket: websockets.WebSocketServerProtocol) -> None:
     """Handles one phone browser WebSocket connection."""
     client_addr = websocket.remote_address
     logger.info("📱 Phone connected: %s", client_addr)
+    tab_id = None
+    global connection_count
 
     try:
+        # Wait for register message
+        try:
+            raw = await asyncio.wait_for(websocket.recv(), timeout=5.0)
+            data = json.loads(raw)
+            if data.get("action") != "register" or "tab_id" not in data:
+                logger.warning("Invalid register from %s", client_addr)
+                await websocket.close(code=4000, reason="Invalid register")
+                return
+            tab_id = data["tab_id"]
+            if tab_id in active_tab_ids:
+                logger.warning("Duplicate tab ID %s from %s, rejecting", tab_id, client_addr)
+                await websocket.close(code=4000, reason="Duplicate tab")
+                return
+            active_tab_ids.add(tab_id)
+            connection_count += 1
+            logger.info("Registered tab ID %s (active: %d)", tab_id, connection_count)
+        except asyncio.TimeoutError:
+            logger.warning("Register timeout from %s", client_addr)
+            await websocket.close(code=4000, reason="Register timeout")
+            return
+
         async for raw in websocket:
             try:
                 data = json.loads(raw)
@@ -276,6 +329,12 @@ async def ws_handler(websocket) -> None:
 
     except Exception as exc:  # noqa: BLE001
         logger.error("Unexpected WS error from %s: %s", client_addr, exc)
+
+    finally:
+        if tab_id:
+            active_tab_ids.discard(tab_id)
+            connection_count -= 1
+            logger.info("Unregistered tab ID %s (active: %d)", tab_id, connection_count)
 
 
 # ─────────────────────────────────────────────
@@ -354,8 +413,8 @@ class PhoneKeyHTTPServer(HTTPServer):
 
 def start_http_server() -> None:
     """Starts HTTP server in a background daemon thread."""
-    httpd = PhoneKeyHTTPServer(("0.0.0.0", HTTP_PORT), QuietHTTPHandler)
-    logger.info("🌐 HTTP server running → http://0.0.0.0:%d", HTTP_PORT)
+    httpd = PhoneKeyHTTPServer(("0.0.0.0", CONFIG["http_port"]), QuietHTTPHandler)
+    logger.info("🌐 HTTP server running → http://0.0.0.0:%d", CONFIG["http_port"])
     httpd.serve_forever()
 
 
@@ -378,7 +437,7 @@ def get_local_ip() -> str:
 # ─────────────────────────────────────────────
 
 def print_banner(local_ip: str) -> None:
-    url = f"http://{local_ip}:{HTTP_PORT}"
+    url = f"http://{local_ip}:{CONFIG['http_port']}"
     os_labels = {"win32": "Windows", "darwin": "macOS", "linux": "Linux"}
     os_label  = os_labels.get(sys.platform, sys.platform)
     print()
@@ -424,7 +483,7 @@ async def main() -> None:
     print_banner(local_ip)
 
     threading.Thread(target=start_http_server, daemon=True).start()
-    logger.info("🔌 WebSocket server running → ws://0.0.0.0:%d", WS_PORT)
+    logger.info("🔌 WebSocket server running → ws://0.0.0.0:%d", CONFIG["ws_port"])
 
     stop_event = asyncio.Event()
     loop       = asyncio.get_running_loop()
@@ -435,9 +494,9 @@ async def main() -> None:
     async with websockets.serve(
         ws_handler,
         "0.0.0.0",
-        WS_PORT,
-        ping_interval=WS_PING_INTERVAL,
-        ping_timeout=WS_PING_TIMEOUT,
+        CONFIG["ws_port"],
+        ping_interval=CONFIG["ws_ping_interval"],
+        ping_timeout=CONFIG["ws_ping_timeout"],
     ):
         logger.info("✅ Server ready — waiting for phone connection...")
         await stop_event.wait()

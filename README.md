@@ -18,6 +18,7 @@
 | Other tools eat laptop RAM | ~15 MB Python process only |
 | Other tools require app install | Pure browser — no app needed |
 | slow reflection on screen | WebSocket over LAN (<5ms latency) |
+| Multiple tabs cause connection conflicts | Tab-based deduplication (one tab per device) |
 
 ---
 
@@ -52,6 +53,7 @@
 | HTTP | `http.server` (stdlib) | Zero extra dependencies |
 | Client | Vanilla HTML5/CSS3/ES6 | No framework, no app install |
 | Input Fix | Sentinel + `input` event | Fixes mobile `keydown:229` bug |
+| Testing | `unittest` (stdlib) | Unit tests for core logic |
 
 ---
 
@@ -60,6 +62,49 @@
 - Python 3.8 or higher
 - Phone and laptop on the **same WiFi network**
 - Any modern phone browser (Chrome, Safari, Firefox)
+
+---
+
+## ⚙️ Configuration
+
+PhoneKey supports configuration via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PHONEKEY_WS_PORT` | 8765 | WebSocket server port |
+| `PHONEKEY_HTTP_PORT` | 8080 | HTTP server port for client UI |
+| `PHONEKEY_LOCK_PORT` | 18765 | Internal socket lock port |
+| `PHONEKEY_KEY_DELAY` | 0.012 | Delay between keystrokes (seconds) |
+| `PHONEKEY_PING_INTERVAL` | 30 | WebSocket ping interval (seconds) |
+| `PHONEKEY_PING_TIMEOUT` | 60 | WebSocket ping timeout (seconds) |
+
+Example:
+```bash
+PHONEKEY_WS_PORT=9999 PHONEKEY_HTTP_PORT=8888 python server.py
+```
+
+---
+
+## ⬇️ Download (No Python Required)
+
+| Platform | Download |
+|---|---|
+| 🪟 Windows | [phonekey-windows.exe](https://github.com/code-with-zeeshan/phonekey/releases/latest/download/phonekey-windows.exe) |
+| 🍎 macOS   | [phonekey-macos](https://github.com/code-with-zeeshan/phonekey/releases/latest/download/phonekey-macos) |
+| 🐧 Linux   | [phonekey-linux](https://github.com/code-with-zeeshan/phonekey/releases/latest/download/phonekey-linux) |
+
+### Run the downloaded file:
+
+**Windows:** Double-click `phonekey-windows.exe`
+
+**macOS / Linux:**
+```bash
+chmod +x phonekey-macos   # or phonekey-linux
+./phonekey-macos
+```
+
+> 💡 macOS may show "unidentified developer" warning.
+> Go to System Settings → Privacy → Allow anyway.
 
 ---
 
@@ -94,19 +139,25 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 5. Run the server
+### 5. (Optional) Run tests
+
+```bash
+python -m unittest test_server.py
+```
+
+### 7. Run the server
 
 ```bash
 python server.py
 ```
 
-### 6. Open on your phone
+### 8. Open on your phone
 
 The terminal will show:
 
 ```
 ╔══════════════════════════════════════════════╗
-║           📱  PhoneKey  v2.0.0  💻           ║
+║           📱  PhoneKey  v2.1.0  💻           ║
 ╠══════════════════════════════════════════════╣
 ║  OS detected : Windows                       ║
 ║  Open on your phone:                         ║
@@ -200,6 +251,7 @@ pip install -r requirements.txt
 ```
 phonekey/
 ├── server.py           ← Main server (run this on your laptop)
+├── test_server.py     ← Unit tests for core logic
 ├── requirements.txt    ← Python dependencies
 ├── README.md           ← This file
 ├── LICENSE             ← MIT License

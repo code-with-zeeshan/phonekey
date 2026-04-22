@@ -1,0 +1,11 @@
+# requirements-dev.txt — Development + build dependencies
+# Install with: pip install -r requirements-dev.txt
+
+# Runtime
+-r requirements.txt
+
+# Build (creates standalone .exe / binary)
+pyinstaller==6.3.0
+
+# Code quality
+ruff==0.3.0

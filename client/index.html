@@ -341,6 +341,13 @@ const syncIndicator = document.getElementById("sync-indicator");
 const statusBadge   = document.getElementById("status-badge");
 const statusText    = document.getElementById("status-text");
 
+// ── Tab ID for deduplication ───────────────────────────────────────────────────
+let tabId = sessionStorage.getItem('phonekey_tab_id');
+if (!tabId) {
+    tabId = crypto.randomUUID();
+    sessionStorage.setItem('phonekey_tab_id', tabId);
+}
+
 // ── WebSocket state ───────────────────────────────────────────────────────────
 let socket         = null;
 let reconnectDelay = RECONNECT_BASE_MS;
@@ -392,6 +399,8 @@ function connect() {
   setStatus("connecting", "Connecting…");
   socket = new WebSocket(WS_URL);
   socket.addEventListener("open",  () => {
+    // Send tab ID for deduplication
+    socket.send(JSON.stringify({ action: "register", tab_id: tabId }));
     reconnectDelay = RECONNECT_BASE_MS;
     setStatus("connected", "Connected ✓");
     clearTimeout(reconnectTimer);
