@@ -134,6 +134,9 @@ jobs:
         with:
           name: phonekey-linux
 
+      - name: List downloaded files
+        run: ls -la *.exe phonekey-* || true
+
       - name: Create Release with binaries
         uses: softprops/action-gh-release@v2
         with:
