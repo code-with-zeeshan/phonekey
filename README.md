@@ -1,6 +1,6 @@
 # 📱→💻 PhoneKey v3.1.0
 
-> Advanced phone-as-keyboard with mouse control, clipboard sync, secure connections, browser chooser, and sticky UI — lightweight, real-time, zero-install on phone.
+> Advanced phone-as-keyboard with mouse control, clipboard sync, secure connections, direct QR connection, and tab-ID deduplication — lightweight, real-time, zero-install on phone.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://python.org)
@@ -23,7 +23,7 @@
 | Other tools require app install | Pure browser — no downloads needed |
 | Slow response | WebSocket over LAN (<5ms latency) |
 | Theme preferences | Dark/light mode toggle with persistence |
-| Hard to open in browser | /launch page for browser selection |
+| Hard to open in browser | Direct QR code connection - no browser chooser needed |
 | UI scrolls away | Sticky header and tab bar for fixed navigation |
 | Windows .exe crashes on close | Console control handler for graceful shutdown |
 

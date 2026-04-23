@@ -6,6 +6,7 @@
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <title>PhoneKey</title>
+  <link rel="icon" href="/phonekey.ico"/>
   <style>
     :root {
       --bg:        #0f1117;
@@ -53,12 +54,6 @@
       padding-top: calc(var(--header-h) + var(--tabbar-h));
     }
 
-    /* ══════════════════════════════════════════
-       STICKY TOP BARS — Fixed Feature 2
-       Both header and tab bar are sticky.
-       They stack: header at top, tab bar below.
-    ══════════════════════════════════════════ */
-
     /* Sticky Header */
     #sticky-header {
       position: fixed;
@@ -77,21 +72,21 @@
       -webkit-backdrop-filter: blur(12px);
     }
 
-    .logo { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.5px; }
+    .logo { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; display: flex; align-items: center; }
     .logo span { color: var(--accent); }
+    .logo-icon { font-size: 1.3rem; margin-right: 4px; }
 
     .header-right { display: flex; align-items: center; gap: 8px; }
 
-    /* ── Theme Toggle — FIX: smaller circle ── */
+    /* ── Theme Toggle ── */
     #theme-toggle {
-      /* FIX: was 36px — reduced to 28px */
       width: 28px;
       height: 28px;
       border-radius: 50%;
       border: 1px solid var(--border);
       background: var(--surface2);
       color: var(--text);
-      font-size: 0.82rem;   /* smaller icon too */
+      font-size: 0.82rem;
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       transition: all var(--tr);
@@ -471,9 +466,9 @@
 <div id="main-app" style="display:none">
 
   <!-- Sticky Header (Feature 2 — fixed while scrolling) -->
-  <div id="sticky-header">
-    <div class="logo">Phone<span>Key</span></div>
-    <div class="header-right">
+   <div id="sticky-header">
+     <div class="logo"><span class="logo-icon">🔐</span>Phone<span>Key</span></div>
+     <div class="header-right">
       <!-- Theme toggle — Fix 2: 28px circle -->
       <button id="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌙</button>
       <div id="status-badge" class="connecting">
@@ -586,7 +581,7 @@
         <button class="fn-btn" onclick="sendSpecial('F12')">F12</button>
       </div>
     </div>
-    <footer>PhoneKey v3.1.0</footer>
+    <footer>PhoneKey v3.1.0 — Lightweight &amp; Local</footer>
   </div>
 
   <!-- ══ MOUSE TAB ══ -->
@@ -638,7 +633,7 @@
         <span id="speed-val">5</span>
       </div>
     </div>
-    <footer>PhoneKey v3.1.0</footer>
+    <footer>PhoneKey v3.1.0 — Lightweight &amp; Local</footer>
   </div>
 
   <!-- ══ CLIPBOARD TAB ══ -->
@@ -662,7 +657,7 @@
         <button class="action-btn" onclick="sendCombo('Control','a')"><span class="icon">⬛</span>Ctrl+A</button>
       </div>
     </div>
-    <footer>PhoneKey v3.1.0</footer>
+    <footer>PhoneKey v3.1.0 — Lightweight &amp; Local</footer>
   </div>
 
   <!-- ══ DEVICES TAB ══ -->
@@ -683,7 +678,7 @@
         </div>
       </div>
     </div>
-    <footer>PhoneKey v3.1.0</footer>
+    <footer>PhoneKey v3.1.0 — Lightweight &amp; Local</footer>
   </div>
 
 </div><!-- /#main-app -->
@@ -718,6 +713,7 @@ let reconnectDelay  = RECONNECT_BASE_MS;
 let reconnectTimer  = null;
 let myDeviceId      = null;
 let myDeviceName    = localStorage.getItem("pk_name") || "";
+let myTabId         = sessionStorage.getItem("pk_tab_id") || crypto.randomUUID();
 let pinBuffer       = "";
 let mouseSpeedMult  = 1.0;
 let previewText     = "";
@@ -725,6 +721,11 @@ let cursorPos       = 0;
 let laptopCursorPos = 0;
 let capsLock        = false;
 let _pendingPaste   = false;
+
+// Persist tab ID for this browser session (sessionStorage = tab session)
+if (!sessionStorage.getItem("pk_tab_id")) {
+    sessionStorage.setItem("pk_tab_id", myTabId);
+}
 
 const modifiers = {
   Shift:false, Control:false, Alt:false,
@@ -741,6 +742,19 @@ const MOD_KEY = {
   document.documentElement.setAttribute("data-theme", t);
   document.getElementById("theme-toggle").textContent = t === "dark" ? "🌙" : "☀️";
 })();
+
+// ── Page Visibility: Auto-reconnect when tab becomes visible ─────────────────
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    const wasConnected = socket && socket.readyState === WebSocket.OPEN;
+    if (!wasConnected && socket && socket.readyState === WebSocket.CLOSED) {
+      // User returned to tab and socket is closed — reconnect immediately
+      clearTimeout(reconnectTimer);
+      reconnectDelay = RECONNECT_BASE_MS;
+      connect();
+    }
+  }
+});
 
 function toggleTheme() {
   const cur = document.documentElement.getAttribute("data-theme") || "dark";
@@ -773,6 +787,16 @@ function onWsOpen() {
   reconnectDelay = RECONNECT_BASE_MS;
   setStatus("connecting", "Authenticating…");
   clearTimeout(reconnectTimer);
+
+  // Send initial message with tabId (auto-PIN if stored)
+  const storedPin = sessionStorage.getItem("pk_pin");
+  if (storedPin) {
+    sendPayload({ action: "pin_auth", pin: storedPin, tabId: myTabId });
+  } else if (SESSION_PIN === null) {
+    // No PIN required: send hello immediately
+    sendPayload({ action: "hello", tabId: myTabId });
+  }
+  // else: wait for user to enter PIN via UI (submitPin will include tabId)
 }
 
 function onWsMessage(e) {
@@ -782,9 +806,14 @@ function onWsMessage(e) {
     case "auth_ok":
       myDeviceId = msg.device_id;
       setStatus("connected", "Connected ✓");
+      // Store PIN in sessionStorage for auto-reconnect (only if PIN was used)
+      if (pinBuffer.length === 4) {
+        sessionStorage.setItem("pk_pin", pinBuffer);
+      }
+      pinBuffer = "";
       showMainApp();
       if (myDeviceName) {
-        sendPayload({ action: "device_name", name: myDeviceName });
+        sendPayload({ action: "device_name", name: myDeviceName, tabId: myTabId });
         document.getElementById("my-name-input").value = myDeviceName;
       }
       break;
@@ -845,7 +874,7 @@ function updatePinDots() {
 }
 
 function submitPin() {
-  sendPayload({ action: "pin_auth", pin: pinBuffer });
+  sendPayload({ action: "pin_auth", pin: pinBuffer, tabId: myTabId });
 }
 
 function handleAuthFail(reason) {

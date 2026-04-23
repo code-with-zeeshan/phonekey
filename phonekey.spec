@@ -12,9 +12,9 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        # Bundle client/index.html into the executable
-        # Format: (source_path, destination_folder_inside_bundle)
+        # Bundle client/index.html and icon into the executable
         ("client/index.html", "client"),
+        ("client/phonekey.ico", "client"),
     ],
     hiddenimports=[
         # pynput backend modules — PyInstaller can't detect these
@@ -68,5 +68,5 @@ exe = EXE(
     entitlements_file=None,
     # Windows: show a nice name in Task Manager
     version_file=None,
-    icon=None,                              # Add icon path here if you have one
+    icon="phonekey.ico",                    # Icon for executable
 )

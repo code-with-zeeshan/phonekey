@@ -1,5 +1,5 @@
 """
-PhoneKey - Lightweight Phone-as-Keyboard Server
+PhoneKey - Lightweight Phone-as-Keyboard & Mouse Server
 Author: Mohammad Zeeshan
 Version: 3.1.0
 License: MIT
@@ -83,7 +83,7 @@ WS_PING_TIMEOUT   = 60
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="phonekey",
-        description="PhoneKey — Use your phone as a wireless keyboard.",
+        description="PhoneKey — Use your phone as a wireless keyboard & Mouse.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -296,19 +296,26 @@ class ConnectedDevice:
     name:      str
     websocket: object
     authed:    bool = False
+    tab_id:    str | None = None
 
 
 _device_registry: dict[str, ConnectedDevice] = {}
+_tab_id_to_device: dict[str, str] = {}  # tab_id -> device_id for deduplication
 _registry_lock = threading.Lock()
 
 
 def _register_device(d: ConnectedDevice) -> None:
     with _registry_lock:
         _device_registry[d.device_id] = d
+        if d.tab_id:
+            _tab_id_to_device[d.tab_id] = d.device_id
 
 
 def _unregister_device(device_id: str) -> None:
     with _registry_lock:
+        device = _device_registry.get(device_id)
+        if device and device.tab_id:
+            _tab_id_to_device.pop(device.tab_id, None)
         _device_registry.pop(device_id, None)
 
 
@@ -383,39 +390,80 @@ async def key_worker() -> None:
 #  WebSocket Handler
 # ─────────────────────────────────────────────
 
+def _try_register_device(device: ConnectedDevice, tab_id: str | None, client_addr: tuple) -> bool:
+    """
+    Atomically check for duplicate tab_id and register device.
+    Returns True if registration successful, False if rejected (duplicate tab).
+    """
+    with _registry_lock:
+        if tab_id and tab_id in _tab_id_to_device:
+            existing_device_id = _tab_id_to_device[tab_id]
+            logger.warning("Duplicate tab connection rejected: tabId=%s from %s (already connected as device %s)",
+                          tab_id, client_addr, existing_device_id[:8])
+            return False
+        # Register device
+        _device_registry[device.device_id] = device
+        if device.tab_id:
+            _tab_id_to_device[device.tab_id] = device.device_id
+    return True
+
+
 async def ws_handler(websocket) -> None:
     client_addr = websocket.remote_address
     device_id   = str(uuid.uuid4())
-    device      = ConnectedDevice(
-        device_id=device_id,
-        name=f"Device-{device_id[:4]}",
-        websocket=websocket,
-        authed=(SESSION_PIN is None),
-    )
-    _register_device(device)
-    logger.info("📱 Phone connecting: %s (id=%s)", client_addr, device_id[:8])
+    tab_id:     str | None = None
+    device:     ConnectedDevice | None = None
+
+    logger.info("📱 Phone connecting: %s", client_addr)
 
     try:
-        # ── PIN Auth ──────────────────────────────────────────────────────
-        if SESSION_PIN is not None:
-            try:
-                raw = await asyncio.wait_for(websocket.recv(), timeout=30.0)
-                msg = json.loads(raw)
-            except asyncio.TimeoutError:
-                await websocket.close(1008, "auth_timeout")
+        # ── Wait for first message (auth or hello) with tab_id ─────────────
+        try:
+            raw = await asyncio.wait_for(websocket.recv(), timeout=30.0)
+            msg = json.loads(raw)
+        except asyncio.TimeoutError:
+            await websocket.close(1008, "auth_timeout")
+            return
+        except json.JSONDecodeError:
+            await websocket.close(1003, "bad_json")
+            return
+
+        tab_id = msg.get("tabId")
+
+        # Validate tab_id: must be a non-empty string
+        if tab_id is not None:
+            if not isinstance(tab_id, str) or not tab_id.strip():
+                tab_id = None
+
+        # ── Handle initial action ─────────────────────────────────────────
+        action = msg.get("action", "")
+
+        if action == "hello":
+            # No-PIN mode: immediate connection
+            if SESSION_PIN is not None:
+                await websocket.close(1008, "pin_required")
                 return
-            except json.JSONDecodeError:
-                await websocket.close(1003, "bad_json")
+            device = ConnectedDevice(
+                device_id=device_id,
+                name=f"Device-{device_id[:4]}",
+                websocket=websocket,
+                authed=True,
+                tab_id=tab_id,
+            )
+            # Atomic check for duplicate tab_id and registration
+            if not _try_register_device(device, tab_id, client_addr):
+                await websocket.close(1008, "duplicate_tab")
+                device = None
+                return
+            logger.info("📱 Connected (no-PIN): %s (id=%s, tabId=%s)", client_addr, device_id[:8], tab_id)
+
+        elif action == "pin_auth":
+            if SESSION_PIN is None:
+                await websocket.close(1008, "pin_not_required")
                 return
 
-            if msg.get("action") != "pin_auth":
-                await websocket.send(json.dumps(
-                    {"type": "auth_fail", "reason": "expected_pin_auth"}
-                ))
-                await websocket.close(1008, "auth_required")
-                return
-
-            if msg.get("pin") != SESSION_PIN:
+            pin = msg.get("pin", "")
+            if pin != SESSION_PIN:
                 logger.warning("🔒 Wrong PIN from %s", client_addr)
                 await websocket.send(json.dumps(
                     {"type": "auth_fail", "reason": "wrong_pin"}
@@ -423,9 +471,25 @@ async def ws_handler(websocket) -> None:
                 await websocket.close(1008, "wrong_pin")
                 return
 
-            device.authed = True
-            logger.info("🔓 PIN verified: %s", client_addr)
+            device = ConnectedDevice(
+                device_id=device_id,
+                name=f"Device-{device_id[:4]}",
+                websocket=websocket,
+                authed=True,
+                tab_id=tab_id,
+            )
+            # Atomic check for duplicate tab_id and registration
+            if not _try_register_device(device, tab_id, client_addr):
+                await websocket.close(1008, "duplicate_tab")
+                device = None
+                return
+            logger.info("🔓 PIN verified: %s (id=%s, tabId=%s)", client_addr, device_id[:8], tab_id)
 
+        else:
+            await websocket.close(1008, "expected_auth")
+            return
+
+        # Send auth success
         await websocket.send(json.dumps({"type": "auth_ok", "device_id": device_id}))
         await _broadcast_device_list()
 
@@ -439,9 +503,10 @@ async def ws_handler(websocket) -> None:
             action = msg.get("action", "")
 
             if action == "device_name":
-                device.name = str(msg.get("name", ""))[:32].strip() or device.name
-                logger.info("📛 Device: '%s' (%s)", device.name, client_addr)
-                await _broadcast_device_list()
+                if device:
+                    device.name = str(msg.get("name", ""))[:32].strip() or device.name
+                    logger.info("📛 Device: '%s' (%s)", device.name, client_addr)
+                    await _broadcast_device_list()
                 continue
 
             if action == "clipboard_push":
@@ -474,8 +539,9 @@ async def ws_handler(websocket) -> None:
     except Exception as exc:  # noqa: BLE001
         logger.error("WS error from %s: %s", client_addr, exc)
     finally:
-        _unregister_device(device_id)
-        await _broadcast_device_list()
+        if device:
+            _unregister_device(device.device_id)
+            await _broadcast_device_list()
 
 # ─────────────────────────────────────────────
 #  SSL Certificate — FIXED
@@ -490,6 +556,9 @@ def build_ssl_context(local_ip: str) -> ssl.SSLContext:
     """
     Generates (or reuses) a self-signed certificate and returns
     a properly configured SSLContext for both HTTP and WebSocket servers.
+
+    The certificate CN is set to the local IP address for better compatibility
+    when accessing via IP. The certificate is regenerated if the LAN IP changes.
     """
     try:
         from cryptography                              import x509
@@ -500,17 +569,31 @@ def build_ssl_context(local_ip: str) -> ssl.SSLContext:
         logger.error("❌  cryptography not installed. Run: pip install cryptography")
         sys.exit(1)
 
-    # ── Reuse existing cert if valid (>7 days remaining) ──────────────────
+    # ── Reuse existing cert if valid AND contains current local IP ─────────
     if CERT_FILE.exists() and KEY_FILE.exists():
         try:
             cert_pem = CERT_FILE.read_bytes()
             existing = x509.load_pem_x509_certificate(cert_pem)
             remaining = existing.not_valid_after_utc - datetime.now(timezone.utc)
-            if remaining.days > 7:
-                logger.info("♻️  Reusing TLS certificate (%d days left).", remaining.days)
+
+            # Check if current local IP is in SAN
+            san_contains_ip = False
+            try:
+                san_ext = existing.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+                for san in san_ext.value:
+                    if isinstance(san, x509.IPAddress) and san.value == ipaddress.IPv4Address(local_ip):
+                        san_contains_ip = True
+                        break
+            except x509.ExtensionNotFound:
+                pass
+
+            if remaining.days > 7 and san_contains_ip:
+                logger.info("♻️  Reusing TLS certificate (%d days left, IP matches).", remaining.days)
                 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
                 ctx.load_cert_chain(certfile=str(CERT_FILE), keyfile=str(KEY_FILE))
                 return ctx
+            else:
+                logger.info("🔐 Regenerating TLS certificate (IP changed or expiring soon).")
         except Exception:
             pass  # Fall through to regenerate
 
@@ -519,8 +602,9 @@ def build_ssl_context(local_ip: str) -> ssl.SSLContext:
 
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
+    # Set CN to local IP for better IP-based access compatibility
     subject = issuer = x509.Name([
-        x509.NameAttribute(NameOID.COMMON_NAME, "PhoneKey"),
+        x509.NameAttribute(NameOID.COMMON_NAME, local_ip),
         x509.NameAttribute(NameOID.ORGANIZATION_NAME, "PhoneKey Local"),
     ])
 
@@ -564,205 +648,23 @@ def build_ssl_context(local_ip: str) -> ssl.SSLContext:
     return ctx
 
 # ─────────────────────────────────────────────
-#  HTTP Server — FIXED
-#
-#  PhoneKeyHTTPServer now:
-#  1. Handles /launch → returns browser chooser HTML
-#  2. Handles /       → returns index.html from CLIENT_DIR
-#  3. Silently drops expected mobile disconnect errors
-#  4. SSL wrapping done correctly before serve_forever
+#  HTTP Server
 # ─────────────────────────────────────────────
 
-# Global launch URL (set in main after IP is known)
-_LAUNCH_URL: str = ""
 _WS_PORT:    int = DEFAULT_WS_PORT
 _USE_HTTPS:  bool = False
-
-
-def _build_launch_page(main_url: str) -> str:
-    """
-    Returns the HTML for the /launch browser-chooser page.
-
-    When a phone scans the QR code it hits /launch.
-    This page shows:
-      1. Auto-redirect countdown (opens in default browser after 3s)
-      2. Deep-link buttons for Chrome, Firefox, Samsung Browser, Safari
-      3. Direct URL the user can long-press to copy
-    """
-    ws_proto  = "wss" if _USE_HTTPS else "ws"
-    ws_url    = f"{ws_proto}://{main_url.split('://')[1].split('/')[0].rsplit(':', 1)[0]}:{_WS_PORT}"
-    # Encode URL for use in deep links
-    import urllib.parse
-    encoded = urllib.parse.quote(main_url, safe="")
-
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
-<title>Open PhoneKey</title>
-<style>
-  :root{{--accent:#6c63ff;--bg:#0f1117;--surface:#1c1f2e;--text:#e8eaf6;--dim:#9e9eb8;}}
-  *{{box-sizing:border-box;margin:0;padding:0}}
-  body{{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-    min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:20px}}
-  .logo{{font-size:2.5rem;font-weight:700;letter-spacing:-1px}}
-  .logo span{{color:var(--accent)}}
-  .subtitle{{font-size:.95rem;color:var(--dim);text-align:center;line-height:1.5}}
-  .countdown{{font-size:1.1rem;font-weight:600;color:var(--accent)}}
-  .browsers{{display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px}}
-  .browser-btn{{
-    display:flex;align-items:center;gap:12px;
-    padding:14px 18px;border-radius:12px;
-    background:var(--surface);border:1px solid #2e3153;
-    color:var(--text);font-size:.95rem;font-weight:600;
-    text-decoration:none;cursor:pointer;
-    transition:all .15s;
-  }}
-  .browser-btn:active{{transform:scale(.96);border-color:var(--accent)}}
-  .browser-btn .b-icon{{font-size:1.4rem;flex-shrink:0;width:28px;text-align:center}}
-  .browser-btn .b-name{{flex:1}}
-  .browser-btn .b-arrow{{color:var(--dim)}}
-  .divider{{display:flex;align-items:center;gap:10px;width:100%;max-width:320px}}
-  .divider hr{{flex:1;border:none;border-top:1px solid #2e3153}}
-  .divider span{{font-size:.75rem;color:var(--dim);white-space:nowrap}}
-  .url-box{{
-    width:100%;max-width:320px;
-    padding:12px 14px;border-radius:10px;
-    background:var(--surface);border:1px solid #2e3153;
-    color:var(--dim);font-size:.8rem;
-    word-break:break-all;text-align:center;
-    user-select:all;-webkit-user-select:all;
-  }}
-  .note{{font-size:.75rem;color:var(--dim);text-align:center;max-width:300px;line-height:1.5}}
-</style>
-</head>
-<body>
-  <div class="logo">Phone<span>Key</span></div>
-  <div class="subtitle">Choose a browser to open PhoneKey</div>
-  <div class="countdown" id="cd">Opening in <span id="sec">3</span>s…</div>
-
-  <div class="browsers">
-
-    <!-- Default browser (meta refresh fallback) -->
-    <a class="browser-btn" href="{main_url}" id="default-btn">
-      <span class="b-icon">🌐</span>
-      <span class="b-name">Default Browser</span>
-      <span class="b-arrow">›</span>
-    </a>
-
-    <!-- Google Chrome Android/iOS -->
-    <a class="browser-btn"
-       href="googlechrome://{main_url.split('://', 1)[1]}"
-       onclick="fallback(event,'{main_url}')">
-      <span class="b-icon">🟢</span>
-      <span class="b-name">Google Chrome</span>
-      <span class="b-arrow">›</span>
-    </a>
-
-    <!-- Firefox Android -->
-    <a class="browser-btn"
-       href="firefox://open-url?url={encoded}"
-       onclick="fallback(event,'{main_url}')">
-      <span class="b-icon">🦊</span>
-      <span class="b-name">Firefox</span>
-      <span class="b-arrow">›</span>
-    </a>
-
-    <!-- Samsung Internet -->
-    <a class="browser-btn"
-       href="samsung-internet://{main_url.split('://', 1)[1]}"
-       onclick="fallback(event,'{main_url}')">
-      <span class="b-icon">🔵</span>
-      <span class="b-name">Samsung Internet</span>
-      <span class="b-arrow">›</span>
-    </a>
-
-    <!-- Microsoft Edge -->
-    <a class="browser-btn"
-       href="microsoft-edge://{main_url.split('://', 1)[1]}"
-       onclick="fallback(event,'{main_url}')">
-      <span class="b-icon">🔷</span>
-      <span class="b-name">Microsoft Edge</span>
-      <span class="b-arrow">›</span>
-    </a>
-
-    <!-- iOS Safari (just redirect — Safari has no deep-link scheme) -->
-    <a class="browser-btn" href="{main_url}">
-      <span class="b-icon">🧭</span>
-      <span class="b-name">Safari</span>
-      <span class="b-arrow">›</span>
-    </a>
-
-  </div>
-
-  <div class="divider"><hr/><span>or copy URL manually</span><hr/></div>
-  <div class="url-box">{main_url}</div>
-  <div class="note">
-    ⚠️ If using HTTPS, accept the certificate warning on first visit:<br/>
-    Tap <strong>Advanced → Proceed to site</strong> (Android) or
-    <strong>Show Details → Visit this website</strong> (iOS)
-  </div>
-
-<script>
-// Auto-countdown redirect to default browser
-let s = 3;
-const secEl = document.getElementById("sec");
-const cdEl  = document.getElementById("cd");
-const timer = setInterval(() => {{
-  s--;
-  secEl.textContent = s;
-  if (s <= 0) {{
-    clearInterval(timer);
-    cdEl.textContent = "Opening…";
-    window.location.href = "{main_url}";
-  }}
-}}, 1000);
-
-// If user taps any browser button — cancel countdown
-document.querySelectorAll(".browser-btn").forEach(btn => {{
-  btn.addEventListener("click", () => {{
-    clearInterval(timer);
-    cdEl.textContent = "Opening chosen browser…";
-  }});
-}});
-
-// Fallback: if deep-link scheme fails (app not installed)
-// redirect to the main URL in current browser after 800ms
-function fallback(e, url) {{
-  setTimeout(() => {{
-    try {{
-      // If we're still on this page, the deep link failed
-      window.location.href = url;
-    }} catch(_) {{}}
-  }}, 800);
-}}
-</script>
-</body>
-</html>"""
+_LAUNCH_URL: str = ""  # Deprecated - no longer used (direct QR URL)
 
 
 class PhoneKeyHTTPHandler(BaseHTTPRequestHandler):
     """
     Custom HTTP handler that:
-    - Serves /launch → browser chooser page
     - Serves / and /index.html → PhoneKey UI
     - Serves all other static files from CLIENT_DIR
     - Suppresses access logs
     """
 
     def do_GET(self):
-        # ── /launch — browser chooser ─────────────────────────────────────
-        if self.path in ("/launch", "/launch/"):
-            page = _build_launch_page(_LAUNCH_URL).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(page)))
-            self.send_header("Cache-Control", "no-cache")
-            self.end_headers()
-            self.wfile.write(page)
-            return
-
         # ── Static files from CLIENT_DIR ──────────────────────────────────
         path = self.path.split("?")[0].lstrip("/") or "index.html"
         file_path = CLIENT_DIR / path
@@ -850,7 +752,7 @@ def get_local_ip() -> str:
 # ─────────────────────────────────────────────
 
 def print_qr_code(url: str) -> None:
-    """Prints ASCII QR code — encodes /launch URL for browser chooser."""
+    """Prints ASCII QR code for the PhoneKey app URL."""
     if not QR_AVAILABLE:
         return
     try:
@@ -863,7 +765,7 @@ def print_qr_code(url: str) -> None:
         qr.add_data(url)
         qr.make(fit=True)
         print()
-        print("  📷  Scan to open PhoneKey (browser chooser):")
+        print("  📷  Scan to open PhoneKey:")
         print()
         for row in qr.get_matrix():
             print("  " + "".join("██" if cell else "  " for cell in row))
@@ -878,7 +780,6 @@ def print_qr_code(url: str) -> None:
 def print_banner(local_ip: str, ssl_ctx: ssl.SSLContext | None) -> None:
     proto      = "https" if ssl_ctx else "http"
     main_url   = f"{proto}://{local_ip}:{ARGS.http_port}"
-    launch_url = f"{main_url}/launch"
     os_label   = {"win32": "Windows", "darwin": "macOS", "linux": "Linux"}.get(sys.platform, sys.platform)
     pin_line   = f"PIN: {SESSION_PIN}" if SESSION_PIN else "PIN: Disabled (--no-pin)"
 
@@ -890,10 +791,9 @@ def print_banner(local_ip: str, ssl_ctx: ssl.SSLContext | None) -> None:
     print(f"║  Mode : {('HTTPS/WSS 🔒' if ssl_ctx else 'HTTP/WS  🔓'):<41}║")
     print(f"║  {pin_line:<48}║")
     print("╠══════════════════════════════════════════════════╣")
-    print(f"║  App URL    : {main_url:<36}║")
-    print(f"║  Launch URL : {launch_url:<36}║")
+    print(f"║  URL : {main_url:<39}║")
     print("║                                                  ║")
-    print("║  Scan QR below — or open Launch URL on phone    ║")
+    print("║  Scan QR code with phone camera                 ║")
     print("║  Phone & laptop must be on the same WiFi        ║")
     print("║  Press Ctrl+C to stop                           ║")
     print("╚══════════════════════════════════════════════════╝")
@@ -904,8 +804,8 @@ def print_banner(local_ip: str, ssl_ctx: ssl.SSLContext | None) -> None:
         print("     Android: Advanced → Proceed to site")
         print("     iOS    : Show Details → Visit this website")
 
-    # QR encodes /launch (browser chooser), not the app directly
-    print_qr_code(launch_url)
+    # QR encodes direct app URL (not a launch page)
+    print_qr_code(main_url)
 
     if SESSION_PIN:
         print(f"  🔐  PIN:  {SESSION_PIN}  ← Enter this on your phone")

@@ -5,22 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [3.1.0] — 2026-04-23 — UI & Stability Release
+## [3.1.0] — 2026-04-23 — Direct Connection Release
 
 ### Added
-- **Browser Chooser Page**: `/launch` endpoint for easy browser selection with clickable links
-- **Sticky UI Elements**: Fixed header and tab bar in client for better navigation on long pages
-- **Windows Console Handler**: Proper Ctrl+C handling in PyInstaller executables for graceful shutdown
-- **SSL Context Improvements**: Fixed HTTPS/WSS server wrapping order for better compatibility
+- **Direct QR Connection**: Removed browser chooser page, direct connection via QR code scan
+- **Tab-ID Deduplication**: Prevent duplicate connections from same browser tab using tab_id tracking
+- **Enhanced SSL Certificate Reuse**: Improved certificate validation with IP address matching for better compatibility
+- **UI Refinements**: Updated favicon, logo styling with icon, theme toggle size adjustment, footer text enhancement
 
 ### Fixed
 - **PyInstaller Exclusions**: Removed problematic imports (`"email"`, `"urllib"`, `"html"`) causing build failures
 - **Git Workflow**: Resolved tag conflict issues in release automation
 - **Connection Metrics**: Ensured proper cleanup on disconnect
+- **Duplicate Tab Connections**: Fixed race condition in device registration with atomic tab_id checking
 
 ### Changed
 - **Version Updates**: Bumped client and README to v3.1.0 branding
 - **Dependencies**: Minor updates to `cryptography` and `websockets` for stability
+- **Connection Flow**: Simplified authentication flow - direct connection with optional PIN verification
 
 ---
 
