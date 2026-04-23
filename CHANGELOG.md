@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.1.0] — 2026-04-23 — UI & Stability Release
+
+### Added
+- **Browser Chooser Page**: `/launch` endpoint for easy browser selection with clickable links
+- **Sticky UI Elements**: Fixed header and tab bar in client for better navigation on long pages
+- **Windows Console Handler**: Proper Ctrl+C handling in PyInstaller executables for graceful shutdown
+- **SSL Context Improvements**: Fixed HTTPS/WSS server wrapping order for better compatibility
+
+### Fixed
+- **PyInstaller Exclusions**: Removed problematic imports (`"email"`, `"urllib"`, `"html"`) causing build failures
+- **Git Workflow**: Resolved tag conflict issues in release automation
+- **Connection Metrics**: Ensured proper cleanup on disconnect
+
+### Changed
+- **Version Updates**: Bumped client and README to v3.1.0 branding
+- **Dependencies**: Minor updates to `cryptography` and `websockets` for stability
+
+---
+
 ## [3.0.0] — 2026-04-22 — Major Feature Release
 
 ### Added

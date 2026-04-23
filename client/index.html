@@ -1,13 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
   <title>PhoneKey</title>
   <style>
-    /* ── CSS Variables — Theme System ── */
     :root {
       --bg:        #0f1117;
       --surface:   #1c1f2e;
@@ -19,497 +18,432 @@
       --text:      #e8eaf6;
       --text-dim:  #9e9eb8;
       --border:    #2e3153;
-      --shadow:    0 2px 12px rgba(0,0,0,0.4);
       --radius:    14px;
       --radius-sm: 8px;
-      --transition: 0.2s ease;
+      --tr:        0.2s ease;
+      --header-h:  52px;   /* sticky header height */
+      --tabbar-h:  54px;   /* sticky tab bar height */
     }
 
-    /* Light theme */
     [data-theme="light"] {
-      --bg:        #f0f2f8;
-      --surface:   #ffffff;
-      --surface2:  #e8eaf2;
-      --accent:    #5b52e0;
-      --success:   #27ae60;
-      --warning:   #e67e22;
-      --danger:    #c0392b;
-      --text:      #1a1d2e;
-      --text-dim:  #6b6f88;
-      --border:    #d0d3e8;
-      --shadow:    0 2px 12px rgba(0,0,0,0.12);
+      --bg:       #f0f2f8;
+      --surface:  #ffffff;
+      --surface2: #e8eaf2;
+      --accent:   #5b52e0;
+      --success:  #27ae60;
+      --warning:  #e67e22;
+      --danger:   #c0392b;
+      --text:     #1a1d2e;
+      --text-dim: #6b6f88;
+      --border:   #d0d3e8;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html, body {
-      height: 100%;
+    html { scroll-behavior: smooth; }
+
+    body {
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 16px;
       overscroll-behavior: none;
       -webkit-tap-highlight-color: transparent;
-      transition: background var(--transition), color var(--transition);
+      /* Push content below both sticky bars */
+      padding-top: calc(var(--header-h) + var(--tabbar-h));
     }
 
-    /* ── Tab Navigation ── */
-    #tab-bar {
-      position: sticky;
+    /* ══════════════════════════════════════════
+       STICKY TOP BARS — Fixed Feature 2
+       Both header and tab bar are sticky.
+       They stack: header at top, tab bar below.
+    ══════════════════════════════════════════ */
+
+    /* Sticky Header */
+    #sticky-header {
+      position: fixed;
       top: 0;
-      z-index: 100;
-      display: flex;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      box-shadow: var(--shadow);
-    }
-
-    .tab-btn {
-      flex: 1;
-      padding: 12px 4px;
-      border: none;
-      background: none;
-      color: var(--text-dim);
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-align: center;
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      transition: all var(--transition);
-      touch-action: manipulation;
-    }
-
-    .tab-btn.active {
-      color: var(--accent);
-      border-bottom-color: var(--accent);
-    }
-
-    .tab-btn .tab-icon { font-size: 1.1rem; display: block; margin-bottom: 2px; }
-
-    /* ── Tab Panels ── */
-    .tab-panel { display: none; padding: 14px 14px 80px; }
-    .tab-panel.active { display: flex; flex-direction: column; gap: 12px; }
-
-    /* ── Header ── */
-    header {
+      left: 0;
+      right: 0;
+      height: var(--header-h);
+      z-index: 200;        /* above tab bar */
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 14px 0;
+      padding: 0 14px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
     }
 
-    .logo { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.5px; }
+    .logo { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.5px; }
     .logo span { color: var(--accent); }
 
     .header-right { display: flex; align-items: center; gap: 8px; }
 
-    /* ── Theme Toggle ── */
+    /* ── Theme Toggle — FIX: smaller circle ── */
     #theme-toggle {
-      width: 36px; height: 36px;
+      /* FIX: was 36px — reduced to 28px */
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
       border: 1px solid var(--border);
       background: var(--surface2);
       color: var(--text);
-      font-size: 1rem;
+      font-size: 0.82rem;   /* smaller icon too */
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      transition: all var(--transition);
+      transition: all var(--tr);
       touch-action: manipulation;
+      flex-shrink: 0;
     }
-    #theme-toggle:active { transform: scale(0.9); }
+    #theme-toggle:active { transform: scale(0.88); }
 
     /* ── Status Badge ── */
     #status-badge {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 0.75rem; font-weight: 600;
-      padding: 5px 10px; border-radius: 999px;
+      display: flex; align-items: center; gap: 5px;
+      font-size: 0.72rem; font-weight: 600;
+      padding: 4px 9px; border-radius: 999px;
       background: var(--surface2);
-      user-select: none;
+      user-select: none; flex-shrink: 0;
     }
     #status-dot {
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--warning);
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--warning); flex-shrink: 0;
     }
     #status-badge.connected    #status-dot { background: var(--success); }
     #status-badge.connecting   #status-dot { background: var(--warning); animation: blink 1s infinite; }
     #status-badge.disconnected #status-dot { background: var(--danger); }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-    /* ── PIN Overlay ── */
+    /* Sticky Tab Bar */
+    #tab-bar {
+      position: fixed;
+      top: var(--header-h);   /* sits directly below header */
+      left: 0;
+      right: 0;
+      height: var(--tabbar-h);
+      z-index: 100;
+      display: flex;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 8px 4px;
+      border: none;
+      background: none;
+      color: var(--text-dim);
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all var(--tr);
+      touch-action: manipulation;
+    }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-btn .t-icon { font-size: 1.05rem; display: block; margin-bottom: 2px; }
+
+    /* ══════════════════════════════════════════
+       Tab Panels
+    ══════════════════════════════════════════ */
+    .tab-panel { display: none; padding: 14px 14px 80px; flex-direction: column; gap: 12px; }
+    .tab-panel.active { display: flex; }
+
+    /* ══════════════════════════════════════════
+       PIN Overlay
+    ══════════════════════════════════════════ */
     #pin-overlay {
       position: fixed; inset: 0; z-index: 1000;
       background: var(--bg);
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      gap: 20px; padding: 30px;
+      gap: 18px; padding: 28px;
     }
-
     #pin-overlay.hidden { display: none; }
+    .pin-logo  { font-size: 2.8rem; }
+    .pin-title { font-size: 1.3rem; font-weight: 700; text-align: center; }
+    .pin-sub   { font-size: 0.88rem; color: var(--text-dim); text-align: center; }
 
-    .pin-logo { font-size: 3rem; }
-    .pin-title { font-size: 1.4rem; font-weight: 700; text-align: center; }
-    .pin-subtitle { font-size: 0.9rem; color: var(--text-dim); text-align: center; }
-
-    #pin-dots {
-      display: flex; gap: 12px;
-    }
-
+    #pin-dots { display: flex; gap: 12px; }
     .pin-dot {
-      width: 18px; height: 18px;
-      border-radius: 50%;
-      border: 2px solid var(--border);
-      background: transparent;
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 2px solid var(--border); background: transparent;
       transition: all 0.15s;
     }
-    .pin-dot.filled {
-      background: var(--accent);
-      border-color: var(--accent);
-    }
-    .pin-dot.error {
-      background: var(--danger);
-      border-color: var(--danger);
-      animation: shake 0.3s ease;
-    }
+    .pin-dot.filled { background: var(--accent); border-color: var(--accent); }
+    .pin-dot.error  { background: var(--danger);  border-color: var(--danger);
+                      animation: shake .3s ease; }
     @keyframes shake {
-      0%,100%{transform:translateX(0)}
-      25%{transform:translateX(-4px)}
-      75%{transform:translateX(4px)}
+      0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)}
     }
 
-    /* PIN numpad */
     #pin-numpad {
-      display: grid;
-      grid-template-columns: repeat(3, 72px);
-      gap: 10px;
+      display: grid; grid-template-columns: repeat(3, 68px); gap: 10px;
     }
-
     .pin-key {
-      height: 60px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--text);
-      font-size: 1.3rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.12s;
-      touch-action: manipulation;
-      display: flex; align-items: center; justify-content: center;
+      height: 58px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--surface);
+      color: var(--text); font-size: 1.25rem; font-weight: 600;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all .12s; touch-action: manipulation;
     }
-    .pin-key:active { transform: scale(0.92); background: var(--surface2); }
-    .pin-key.backspace { font-size: 1rem; }
-    .pin-key.empty { border: none; background: none; pointer-events: none; }
+    .pin-key:active { transform: scale(.91); background: var(--surface2); }
+    .pin-key.empty  { border: none; background: none; pointer-events: none; }
+    #pin-error { font-size:.82rem; color:var(--danger); font-weight:600; min-height:1.2em; }
 
-    #pin-error {
-      font-size: 0.85rem; color: var(--danger);
-      font-weight: 600; min-height: 1.2em;
-    }
-
-    /* ── Section label ── */
+    /* ══════════════════════════════════════════
+       Shared Components
+    ══════════════════════════════════════════ */
     .section-label {
-      font-size: 0.7rem; font-weight: 700;
+      font-size: .7rem; font-weight: 700;
       text-transform: uppercase; letter-spacing: 1px;
-      color: var(--text-dim); margin-bottom: 6px;
+      color: var(--text-dim); margin-bottom: 5px;
     }
 
-    /* ── Hidden Sentinel ── */
+    /* Hidden sentinel */
     #sentinel-input {
       position: fixed; top: -9999px; left: -9999px;
       width: 1px; height: 1px; opacity: 0; pointer-events: none;
     }
 
-    /* ── Tap to Type ── */
+    /* Tap to type */
     #tap-to-type {
-      width: 100%; padding: 16px;
+      width: 100%; padding: 15px;
       border-radius: var(--radius);
-      background: var(--surface);
-      border: 2px dashed var(--border);
-      color: var(--text-dim);
-      font-size: 0.95rem; cursor: pointer; text-align: center;
-      transition: border-color var(--transition), background var(--transition);
+      background: var(--surface); border: 2px dashed var(--border);
+      color: var(--text-dim); font-size: .92rem;
+      cursor: pointer; text-align: center;
+      transition: border-color var(--tr), background var(--tr);
       outline: none; touch-action: manipulation;
     }
     #tap-to-type.active {
-      border-color: var(--accent);
-      background: var(--surface2);
-      color: var(--text);
+      border-color: var(--accent); background: var(--surface2); color: var(--text);
     }
 
-    /* ── Live Preview ── */
+    /* Live Preview */
     .preview-wrapper { position: relative; }
-
     #live-display {
-      min-height: 70px; max-height: 180px; overflow-y: auto;
+      min-height: 68px; max-height: 170px; overflow-y: auto;
       background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 10px 12px;
       font-size: 1rem; line-height: 1.65; color: var(--text);
       word-break: break-word; white-space: pre-wrap;
       cursor: text; user-select: text;
-      transition: border-color var(--transition);
+      transition: border-color var(--tr);
     }
     #live-display.active-preview { border-color: var(--accent); }
-
     .v-caret {
       display: inline-block; width: 2px; height: 1.1em;
       background: var(--accent); vertical-align: text-bottom;
       margin: 0 1px; border-radius: 1px;
-      animation: cur-blink 1s step-end infinite;
+      animation: cblink 1s step-end infinite;
     }
-    @keyframes cur-blink { 0%,100%{opacity:1} 50%{opacity:0} }
-
+    @keyframes cblink { 0%,100%{opacity:1} 50%{opacity:0} }
     #preview-placeholder {
       position: absolute; top: 10px; left: 12px;
       color: var(--text-dim); font-style: italic; font-size: 1rem;
-      pointer-events: none; transition: opacity 0.2s;
+      pointer-events: none; transition: opacity .2s;
     }
-
     #cursor-info {
-      position: absolute; bottom: 6px; right: 8px;
-      font-size: 0.65rem; color: var(--text-dim);
-      pointer-events: none; font-variant-numeric: tabular-nums;
+      position: absolute; bottom: 5px; right: 7px;
+      font-size: .63rem; color: var(--text-dim); pointer-events: none;
+      font-variant-numeric: tabular-nums;
     }
-
     #sync-indicator {
-      position: absolute; top: 6px; right: 8px;
-      font-size: 0.65rem; color: var(--accent);
+      position: absolute; top: 5px; right: 7px;
+      font-size: .63rem; color: var(--accent);
       opacity: 0; pointer-events: none;
-      font-weight: 600; transition: opacity 0.3s;
+      font-weight: 600; transition: opacity .3s;
     }
     #sync-indicator.show { opacity: 1; }
-
     .preview-toolbar {
       display: flex; align-items: center;
       justify-content: space-between; margin-bottom: 5px;
     }
-
     #clear-display {
       background: none; border: none; color: var(--text-dim);
-      font-size: 0.75rem; cursor: pointer; padding: 2px 6px;
-      border-radius: 4px; transition: color var(--transition);
+      font-size: .74rem; cursor: pointer; padding: 2px 5px;
+      border-radius: 4px; transition: color var(--tr);
       touch-action: manipulation;
     }
     #clear-display:hover { color: var(--danger); }
 
-    /* ── Buttons ── */
-    .btn-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
-    .btn-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+    /* Button grids */
+    .btn-grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }
+    .btn-grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 7px; }
 
     .action-btn {
-      padding: 13px 6px;
-      border-radius: var(--radius-sm);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-size: 0.82rem; font-weight: 600;
+      padding: 12px 5px; border-radius: var(--radius-sm);
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); font-size: .8rem; font-weight: 600;
       cursor: pointer; text-align: center;
-      transition: background 0.12s, transform 0.08s, border-color 0.12s;
+      transition: background .12s, transform .08s, border-color .12s;
       outline: none; user-select: none; -webkit-user-select: none;
       touch-action: manipulation;
     }
-    .action-btn:active { transform: scale(0.93); background: var(--surface2); border-color: var(--accent); }
-    .action-btn .icon  { font-size: 1.1rem; display: block; margin-bottom: 2px; }
+    .action-btn:active { transform: scale(.93); background: var(--surface2); border-color: var(--accent); }
+    .action-btn .icon  { font-size: 1.05rem; display: block; margin-bottom: 2px; }
 
-    /* ── Modifier Keys ── */
+    /* Modifier keys */
     .mod-group-label {
-      font-size: 0.63rem; color: var(--text-dim);
-      text-align: center; margin: 6px 0 5px;
+      font-size: .62rem; color: var(--text-dim);
+      text-align: center; margin: 5px 0 4px;
     }
-
     .mod-btn {
-      padding: 12px 6px;
-      border-radius: var(--radius-sm);
+      padding: 11px 5px; border-radius: var(--radius-sm);
       background: var(--surface); border: 1px solid var(--border);
-      color: var(--text-dim); font-size: 0.8rem; font-weight: 700;
+      color: var(--text-dim); font-size: .78rem; font-weight: 700;
       text-transform: uppercase; cursor: pointer; text-align: center;
-      transition: all 0.12s; outline: none;
-      user-select: none; -webkit-user-select: none;
-      touch-action: manipulation;
+      transition: all .12s; outline: none;
+      user-select: none; -webkit-user-select: none; touch-action: manipulation;
     }
     .mod-btn.active {
       background: var(--accent); border-color: var(--accent); color: #fff;
-      animation: mod-glow 1.5s ease-in-out infinite;
+      animation: mglow 1.5s ease-in-out infinite;
     }
-    @keyframes mod-glow {
-      0%,100%{ box-shadow: 0 0 0 0 rgba(108,99,255,.4); }
-      50%    { box-shadow: 0 0 0 6px rgba(108,99,255,0); }
+    @keyframes mglow {
+      0%,100%{ box-shadow:0 0 0 0 rgba(108,99,255,.4); }
+      50%    { box-shadow:0 0 0 6px rgba(108,99,255,0); }
     }
 
-    /* ── Function Keys ── */
+    /* Function keys */
     .fn-row {
       display: flex; gap: 5px;
-      overflow-x: auto; padding-bottom: 3px; scrollbar-width: none;
+      overflow-x: auto; padding-bottom: 2px; scrollbar-width: none;
     }
     .fn-row::-webkit-scrollbar { display: none; }
-
     .fn-btn {
-      flex: 0 0 auto; min-width: 42px; padding: 9px 5px;
+      flex: 0 0 auto; min-width: 41px; padding: 9px 4px;
       border-radius: var(--radius-sm);
       background: var(--surface); border: 1px solid var(--border);
-      color: var(--text-dim); font-size: 0.75rem; font-weight: 600;
+      color: var(--text-dim); font-size: .74rem; font-weight: 600;
       cursor: pointer; text-align: center; outline: none;
-      user-select: none; touch-action: manipulation; transition: all 0.12s;
+      user-select: none; touch-action: manipulation; transition: all .12s;
     }
     .fn-btn:active { background: var(--surface2); color: var(--text); border-color: var(--accent); }
 
-    /* ── Mouse Trackpad ── */
+    /* Trackpad */
     #trackpad-area {
-      width: 100%;
-      height: 220px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      position: relative;
-      cursor: crosshair;
-      touch-action: none;       /* prevent browser scroll during trackpad use */
-      user-select: none;
-      overflow: hidden;
+      width: 100%; height: 210px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); position: relative;
+      cursor: crosshair; touch-action: none;
+      user-select: none; overflow: hidden;
     }
-
     #trackpad-hint {
       position: absolute; inset: 0;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      color: var(--text-dim); font-size: 0.85rem;
-      pointer-events: none; gap: 6px;
-      transition: opacity 0.3s;
+      color: var(--text-dim); font-size: .82rem;
+      pointer-events: none; gap: 5px; transition: opacity .3s;
     }
-    #trackpad-hint .hint-icon { font-size: 2rem; }
-
+    #trackpad-hint .h-icon { font-size: 1.8rem; }
     #trackpad-area.active-touch #trackpad-hint { opacity: 0; }
+    .tp-ripple {
+      position: absolute; border-radius: 50%;
+      background: rgba(108,99,255,.2);
+      width: 36px; height: 36px; margin: -18px 0 0 -18px;
+      animation: ripple .4s ease-out forwards; pointer-events: none;
+    }
+    @keyframes ripple { to { transform: scale(3); opacity: 0; } }
 
-    /* Ripple on touch */
-    .trackpad-ripple {
-      position: absolute;
-      border-radius: 50%;
-      background: rgba(108,99,255,0.2);
-      width: 40px; height: 40px;
-      margin: -20px 0 0 -20px;
-      animation: ripple-expand 0.4s ease-out forwards;
-      pointer-events: none;
-    }
-    @keyframes ripple-expand {
-      to { transform: scale(3); opacity: 0; }
-    }
-
-    /* Mouse button row */
-    .mouse-btn-row {
-      display: flex; gap: 7px;
-    }
+    .mouse-btn-row { display: flex; gap: 7px; }
     .mouse-btn {
-      flex: 1; padding: 13px;
+      flex: 1; padding: 12px;
       border-radius: var(--radius-sm);
       background: var(--surface); border: 1px solid var(--border);
-      color: var(--text); font-size: 0.85rem; font-weight: 600;
+      color: var(--text); font-size: .82rem; font-weight: 600;
       cursor: pointer; text-align: center;
-      transition: all 0.12s; outline: none;
+      transition: all .12s; outline: none;
       user-select: none; touch-action: manipulation;
     }
-    .mouse-btn:active { background: var(--surface2); border-color: var(--accent); transform: scale(0.94); }
+    .mouse-btn:active { background: var(--surface2); border-color: var(--accent); transform: scale(.94); }
 
-    /* Speed slider */
-    .slider-row {
-      display: flex; align-items: center; gap: 10px;
-    }
-    .slider-row label { font-size: 0.78rem; color: var(--text-dim); white-space: nowrap; }
-    #speed-slider {
-      flex: 1; height: 4px;
-      accent-color: var(--accent);
-    }
-    #speed-val { font-size: 0.78rem; color: var(--accent); font-weight: 600; min-width: 28px; }
+    .slider-row { display: flex; align-items: center; gap: 10px; }
+    .slider-row label { font-size: .76rem; color: var(--text-dim); white-space: nowrap; }
+    #speed-slider { flex: 1; height: 4px; accent-color: var(--accent); }
+    #speed-val { font-size: .76rem; color: var(--accent); font-weight: 600; min-width: 26px; }
 
-    /* ── Clipboard ── */
+    /* Clipboard */
     #clipboard-textarea {
-      width: 100%;
-      min-height: 100px;
-      padding: 10px 12px;
+      width: 100%; min-height: 96px; padding: 10px 12px;
       border-radius: var(--radius);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-size: 0.95rem; line-height: 1.5;
-      resize: vertical;
-      font-family: inherit;
-      outline: none;
-      transition: border-color var(--transition);
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); font-size: .92rem; line-height: 1.5;
+      resize: vertical; font-family: inherit; outline: none;
+      transition: border-color var(--tr);
     }
     #clipboard-textarea:focus { border-color: var(--accent); }
-
     #clipboard-send {
-      width: 100%; padding: 14px;
+      width: 100%; padding: 13px;
       border-radius: var(--radius);
-      background: var(--accent);
-      border: none; color: #fff;
-      font-size: 1rem; font-weight: 700;
-      cursor: pointer; transition: all 0.12s;
-      touch-action: manipulation;
+      background: var(--accent); border: none; color: #fff;
+      font-size: .95rem; font-weight: 700;
+      cursor: pointer; transition: all .12s; touch-action: manipulation;
     }
-    #clipboard-send:active { opacity: 0.85; transform: scale(0.98); }
-    #clipboard-send:disabled { opacity: 0.5; cursor: not-allowed; }
-
+    #clipboard-send:active  { opacity: .85; transform: scale(.98); }
+    #clipboard-send:disabled{ opacity: .5; cursor: not-allowed; }
     #clipboard-status {
-      text-align: center; font-size: 0.82rem;
-      color: var(--text-dim); min-height: 1.2em;
+      text-align: center; font-size: .8rem;
+      color: var(--text-dim); min-height: 1.1em;
     }
     #clipboard-status.success { color: var(--success); }
     #clipboard-status.error   { color: var(--danger); }
 
-    /* ── Device List ── */
-    #device-list {
-      display: flex; flex-direction: column; gap: 8px;
-    }
-
+    /* Devices */
+    #device-list { display: flex; flex-direction: column; gap: 8px; }
     .device-card {
       display: flex; align-items: center; gap: 10px;
-      padding: 12px 14px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
+      padding: 11px 13px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
     }
     .device-card.is-me { border-color: var(--accent); }
-
-    .device-info { flex: 1; }
-    .device-name { font-size: 0.9rem; font-weight: 600; }
-    .device-sub  { font-size: 0.72rem; color: var(--text-dim); margin-top: 1px; }
+    .d-avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: var(--accent); display: flex;
+      align-items: center; justify-content: center;
+      font-size: .95rem; color: #fff; flex-shrink: 0;
+    }
+    .d-info { flex: 1; }
+    .d-name  { font-size: .88rem; font-weight: 600; }
+    .d-sub   { font-size: .7rem; color: var(--text-dim); margin-top: 1px; }
 
     #my-name-input {
-      width: 100%;
-      padding: 10px 12px;
+      width: 100%; padding: 9px 12px;
       border-radius: var(--radius-sm);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-size: 0.95rem;
-      outline: none;
-      transition: border-color var(--transition);
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); font-size: .92rem;
+      outline: none; transition: border-color var(--tr);
     }
     #my-name-input:focus { border-color: var(--accent); }
 
     #save-name-btn {
-      width: 100%; padding: 11px;
+      width: 100%; padding: 10px;
       border-radius: var(--radius-sm);
       background: var(--surface2); border: 1px solid var(--border);
-      color: var(--text); font-size: 0.9rem; font-weight: 600;
-      cursor: pointer; transition: all 0.12s;
-      touch-action: manipulation;
+      color: var(--text); font-size: .88rem; font-weight: 600;
+      cursor: pointer; transition: all .12s; touch-action: manipulation;
     }
     #save-name-btn:active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
     footer {
-      text-align: center; font-size: 0.68rem; color: var(--text-dim);
-      padding: 16px 14px 4px;
+      text-align: center; font-size: .66rem;
+      color: var(--text-dim); padding: 14px 14px 4px;
     }
   </style>
 </head>
-
 <body>
 
-<!-- ── PIN Overlay ─────────────────────────────────────────────── -->
+<!-- ── PIN Overlay ── -->
 <div id="pin-overlay">
   <div class="pin-logo">🔐</div>
   <div class="pin-title">Enter Connection PIN</div>
-  <div class="pin-subtitle" id="pin-subtitle">
-    Check the PIN displayed in your laptop terminal
-  </div>
+  <div class="pin-sub">Check the PIN in your laptop terminal</div>
   <div id="pin-dots">
     <div class="pin-dot" id="pd0"></div>
     <div class="pin-dot" id="pd1"></div>
@@ -533,48 +467,49 @@
   </div>
 </div>
 
-<!-- ── Main App ────────────────────────────────────────────────── -->
+<!-- ── Main App ── -->
 <div id="main-app" style="display:none">
 
-  <header>
+  <!-- Sticky Header (Feature 2 — fixed while scrolling) -->
+  <div id="sticky-header">
     <div class="logo">Phone<span>Key</span></div>
     <div class="header-right">
+      <!-- Theme toggle — Fix 2: 28px circle -->
       <button id="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌙</button>
       <div id="status-badge" class="connecting">
         <div id="status-dot"></div>
         <span id="status-text">Connecting…</span>
       </div>
     </div>
-  </header>
+  </div>
 
-  <!-- Tab Bar -->
+  <!-- Sticky Tab Bar (Feature 2 — fixed while scrolling) -->
   <div id="tab-bar">
     <button class="tab-btn active" onclick="switchTab('keyboard')" id="tab-keyboard">
-      <span class="tab-icon">⌨️</span>Keyboard
+      <span class="t-icon">⌨️</span>Keyboard
     </button>
     <button class="tab-btn" onclick="switchTab('mouse')" id="tab-mouse">
-      <span class="tab-icon">🖱️</span>Mouse
+      <span class="t-icon">🖱️</span>Mouse
     </button>
     <button class="tab-btn" onclick="switchTab('clipboard')" id="tab-clipboard">
-      <span class="tab-icon">📋</span>Clipboard
+      <span class="t-icon">📋</span>Clipboard
     </button>
     <button class="tab-btn" onclick="switchTab('devices')" id="tab-devices">
-      <span class="tab-icon">📱</span>Devices
+      <span class="t-icon">📱</span>Devices
     </button>
   </div>
 
-  <!-- ══════ TAB: KEYBOARD ══════ -->
+  <!-- Hidden sentinel -->
+  <textarea
+    id="sentinel-input"
+    autocomplete="off" autocorrect="off"
+    autocapitalize="off" spellcheck="false"
+    aria-hidden="true" tabindex="-1"
+  ></textarea>
+
+  <!-- ══ KEYBOARD TAB ══ -->
   <div class="tab-panel active" id="panel-keyboard">
 
-    <!-- Hidden sentinel -->
-    <textarea
-      id="sentinel-input"
-      autocomplete="off" autocorrect="off"
-      autocapitalize="off" spellcheck="false"
-      aria-hidden="true" tabindex="-1"
-    ></textarea>
-
-    <!-- Tap to Type -->
     <div>
       <div class="section-label">Typing</div>
       <button id="tap-to-type" onclick="activateSentinel()">
@@ -582,12 +517,11 @@
       </button>
     </div>
 
-    <!-- Live Preview -->
     <div>
       <div class="preview-toolbar">
         <div class="section-label" style="margin-bottom:0">
           Live Preview
-          <span style="font-size:0.62rem;color:var(--text-dim);text-transform:none;font-weight:400;margin-left:5px;">
+          <span style="font-size:.6rem;color:var(--text-dim);text-transform:none;font-weight:400;margin-left:4px;">
             tap to move cursor — syncs laptop
           </span>
         </div>
@@ -601,7 +535,6 @@
       </div>
     </div>
 
-    <!-- Quick Keys -->
     <div>
       <div class="section-label">Quick Keys</div>
       <div class="btn-grid-3">
@@ -620,16 +553,15 @@
       </div>
     </div>
 
-    <!-- Modifier Keys -->
     <div>
-      <div class="section-label">Modifier Keys <span style="font-size:0.62rem;text-transform:none;font-weight:400;">(tap to hold — auto-releases)</span></div>
-      <div class="mod-group-label">Left Side</div>
+      <div class="section-label">Modifier Keys <span style="font-size:.6rem;text-transform:none;font-weight:400;">(tap to hold — auto-releases)</span></div>
+      <div class="mod-group-label">Left</div>
       <div class="btn-grid-3">
         <button class="mod-btn" id="mod-Shift"   onclick="toggleModifier('Shift')">⇧ Shift</button>
         <button class="mod-btn" id="mod-Control" onclick="toggleModifier('Control')">Ctrl</button>
         <button class="mod-btn" id="mod-Alt"     onclick="toggleModifier('Alt')">Alt</button>
       </div>
-      <div class="mod-group-label">Right Side</div>
+      <div class="mod-group-label">Right</div>
       <div class="btn-grid-3">
         <button class="mod-btn" id="mod-ShiftRight"   onclick="toggleModifier('ShiftRight')">⇧ Shift</button>
         <button class="mod-btn" id="mod-ControlRight" onclick="toggleModifier('ControlRight')">Ctrl</button>
@@ -637,7 +569,6 @@
       </div>
     </div>
 
-    <!-- Function Keys -->
     <div>
       <div class="section-label">Function Keys</div>
       <div class="fn-row">
@@ -655,36 +586,32 @@
         <button class="fn-btn" onclick="sendSpecial('F12')">F12</button>
       </div>
     </div>
-
-    <footer>PhoneKey v3.0.0</footer>
+    <footer>PhoneKey v3.1.0</footer>
   </div>
 
-  <!-- ══════ TAB: MOUSE ══════ -->
+  <!-- ══ MOUSE TAB ══ -->
   <div class="tab-panel" id="panel-mouse">
-
     <div>
       <div class="section-label">Trackpad
-        <span style="font-size:0.62rem;text-transform:none;font-weight:400;">
-          — drag to move · tap to click · 2-finger tap = right-click · 2-finger drag = scroll
+        <span style="font-size:.6rem;text-transform:none;font-weight:400;">
+          drag=move · tap=click · 2-finger tap=right-click · 2-finger drag=scroll
         </span>
       </div>
       <div id="trackpad-area">
         <div id="trackpad-hint">
-          <span class="hint-icon">👆</span>
+          <span class="h-icon">👆</span>
           <span>Touch and drag to move cursor</span>
         </div>
       </div>
     </div>
-
     <div>
       <div class="section-label">Mouse Buttons</div>
       <div class="mouse-btn-row">
-        <button class="mouse-btn" onclick="mouseClick('left')">◀ Left Click</button>
-        <button class="mouse-btn" onclick="mouseClick('middle')">● Middle</button>
-        <button class="mouse-btn" onclick="mouseClick('right')">Right Click ▶</button>
+        <button class="mouse-btn" onclick="mouseClick('left')">◀ Left</button>
+        <button class="mouse-btn" onclick="mouseClick('middle')">● Mid</button>
+        <button class="mouse-btn" onclick="mouseClick('right')">Right ▶</button>
       </div>
     </div>
-
     <div>
       <div class="section-label">Double Click</div>
       <div class="mouse-btn-row">
@@ -692,7 +619,6 @@
         <button class="mouse-btn" onclick="mouseDoubleClick('right')">Double Right ▶▶</button>
       </div>
     </div>
-
     <div>
       <div class="section-label">Scroll</div>
       <div class="btn-grid-4">
@@ -702,101 +628,62 @@
         <button class="action-btn" onclick="mouseScroll(3,0)"><span class="icon">→</span>Right</button>
       </div>
     </div>
-
     <div>
       <div class="section-label">Pointer Speed</div>
       <div class="slider-row">
         <label>Slow</label>
-        <input
-          type="range" id="speed-slider"
-          min="1" max="10" value="5" step="1"
-          oninput="updateSpeed(this.value)"
-        />
+        <input type="range" id="speed-slider" min="1" max="10" value="5" step="1"
+               oninput="updateSpeed(this.value)"/>
         <label>Fast</label>
         <span id="speed-val">5</span>
       </div>
     </div>
-
-    <footer>PhoneKey v3.0.0</footer>
+    <footer>PhoneKey v3.1.0</footer>
   </div>
 
-  <!-- ══════ TAB: CLIPBOARD ══════ -->
+  <!-- ══ CLIPBOARD TAB ══ -->
   <div class="tab-panel" id="panel-clipboard">
-
     <div>
       <div class="section-label">Phone → Laptop Clipboard</div>
-      <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:8px;line-height:1.5;">
-        Type or paste text from your phone below.
-        Press "Send to Laptop" to copy it to your laptop clipboard.
-        Then press <strong>Ctrl+V</strong> on your laptop to paste.
+      <p style="font-size:.8rem;color:var(--text-dim);margin-bottom:8px;line-height:1.5;">
+        Type or paste below → send to laptop clipboard → press Ctrl+V on laptop.
       </p>
-      <textarea
-        id="clipboard-textarea"
-        placeholder="Type or paste your text here…"
-        autocorrect="off"
-        spellcheck="false"
-      ></textarea>
+      <textarea id="clipboard-textarea"
+                placeholder="Type or paste text here…"
+                autocorrect="off" spellcheck="false"></textarea>
     </div>
-
-    <button id="clipboard-send" onclick="sendClipboard()">
-      📋 Send to Laptop Clipboard
-    </button>
-
+    <button id="clipboard-send" onclick="sendClipboard()">📋 Send to Laptop Clipboard</button>
     <div id="clipboard-status"></div>
-
-    <div style="border-top: 1px solid var(--border); padding-top: 12px;">
-      <div class="section-label">Quick Paste Shortcuts</div>
-      <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">
-        After sending to clipboard, use these to paste on laptop:
-      </p>
+    <div style="border-top:1px solid var(--border);padding-top:10px;">
+      <div class="section-label">Quick Shortcuts</div>
       <div class="btn-grid-3">
-        <button class="action-btn" onclick="sendClipboardThenPaste()">
-          <span class="icon">⚡</span>Send + Paste
-        </button>
-        <button class="action-btn" onclick="sendCombo('Control', 'v')">
-          <span class="icon">📌</span>Ctrl+V
-        </button>
-        <button class="action-btn" onclick="sendCombo('Control', 'a')">
-          <span class="icon">⬛</span>Ctrl+A
-        </button>
+        <button class="action-btn" onclick="sendClipboardThenPaste()"><span class="icon">⚡</span>Send+Paste</button>
+        <button class="action-btn" onclick="sendCombo('Control','v')"><span class="icon">📌</span>Ctrl+V</button>
+        <button class="action-btn" onclick="sendCombo('Control','a')"><span class="icon">⬛</span>Ctrl+A</button>
       </div>
     </div>
-
-    <footer>PhoneKey v3.0.0</footer>
+    <footer>PhoneKey v3.1.0</footer>
   </div>
 
-  <!-- ══════ TAB: DEVICES ══════ -->
+  <!-- ══ DEVICES TAB ══ -->
   <div class="tab-panel" id="panel-devices">
-
     <div>
       <div class="section-label">My Device Name</div>
-      <input
-        id="my-name-input"
-        type="text"
-        placeholder="Enter your device name…"
-        maxlength="32"
-        autocomplete="off"
-      />
-      <div style="height:7px;"></div>
-      <button id="save-name-btn" onclick="saveDeviceName()">
-        💾 Save Name
-      </button>
+      <input id="my-name-input" type="text"
+             placeholder="Enter your device name…"
+             maxlength="32" autocomplete="off"/>
+      <div style="height:6px;"></div>
+      <button id="save-name-btn" onclick="saveDeviceName()">💾 Save Name</button>
     </div>
-
     <div>
-      <div class="section-label">Connected Devices
-        <span style="font-size:0.62rem;text-transform:none;font-weight:400;">
-          — all on same WiFi
-        </span>
-      </div>
+      <div class="section-label">Connected Devices</div>
       <div id="device-list">
-        <div style="font-size:.85rem;color:var(--text-dim);text-align:center;padding:16px;">
-          No devices connected yet…
+        <div style="font-size:.83rem;color:var(--text-dim);text-align:center;padding:14px;">
+          No devices connected…
         </div>
       </div>
     </div>
-
-    <footer>PhoneKey v3.0.0</footer>
+    <footer>PhoneKey v3.1.0</footer>
   </div>
 
 </div><!-- /#main-app -->
@@ -804,18 +691,16 @@
 <script>
 "use strict";
 
-// ── Config ───────────────────────────────────────────────────────────────────
+// ── Config ────────────────────────────────────────────────────────────────────
 const WS_PORT           = 8765;
+const WS_PROTO          = location.protocol === "https:" ? "wss" : "ws";
+const WS_URL            = `${WS_PROTO}://${location.hostname}:${WS_PORT}`;
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS  = 16000;
 const RECONNECT_FACTOR  = 2;
 const SENTINEL          = "\u200B";
 
-// Auto-detect ws:// or wss:// based on page protocol
-const WS_PROTO  = location.protocol === "https:" ? "wss" : "ws";
-const WS_URL    = `${WS_PROTO}://${location.hostname}:${WS_PORT}`;
-
-// ── DOM ──────────────────────────────────────────────────────────────────────
+// ── DOM ───────────────────────────────────────────────────────────────────────
 const sentinelEl    = document.getElementById("sentinel-input");
 const tapBtn        = document.getElementById("tap-to-type");
 const liveDisplay   = document.getElementById("live-display");
@@ -827,45 +712,42 @@ const statusText    = document.getElementById("status-text");
 const pinOverlay    = document.getElementById("pin-overlay");
 const mainApp       = document.getElementById("main-app");
 
-// ── App State ─────────────────────────────────────────────────────────────────
-let socket           = null;
-let reconnectDelay   = RECONNECT_BASE_MS;
-let reconnectTimer   = null;
-let isAuthenticated  = false;
-let myDeviceId       = null;
-let myDeviceName     = localStorage.getItem("phonekey_device_name") || "";
-let pinBuffer        = "";
-let mouseSpeedMult   = 1.0;
+// ── State ─────────────────────────────────────────────────────────────────────
+let socket          = null;
+let reconnectDelay  = RECONNECT_BASE_MS;
+let reconnectTimer  = null;
+let myDeviceId      = null;
+let myDeviceName    = localStorage.getItem("pk_name") || "";
+let pinBuffer       = "";
+let mouseSpeedMult  = 1.0;
+let previewText     = "";
+let cursorPos       = 0;
+let laptopCursorPos = 0;
+let capsLock        = false;
+let _pendingPaste   = false;
 
-// ── Virtual Cursor State ──────────────────────────────────────────────────────
-let previewText      = "";
-let cursorPos        = 0;
-let laptopCursorPos  = 0;
-
-// ── Modifier State ────────────────────────────────────────────────────────────
 const modifiers = {
-  Shift: false, Control: false, Alt: false,
-  ShiftRight: false, ControlRight: false, AltRight: false,
+  Shift:false, Control:false, Alt:false,
+  ShiftRight:false, ControlRight:false, AltRight:false,
 };
 const MOD_KEY = {
-  Shift: "Shift", Control: "Control", Alt: "Alt",
-  ShiftRight: "ShiftRight", ControlRight: "ControlRight", AltRight: "AltRight",
+  Shift:"Shift", Control:"Control", Alt:"Alt",
+  ShiftRight:"ShiftRight", ControlRight:"ControlRight", AltRight:"AltRight",
 };
-let capsLock = false;
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
-const savedTheme = localStorage.getItem("phonekey_theme") || "dark";
-applyTheme(savedTheme);
-
-function applyTheme(theme) {
-  document.documentElement.setAttribute("data-theme", theme);
-  document.getElementById("theme-toggle").textContent = theme === "dark" ? "🌙" : "☀️";
-  localStorage.setItem("phonekey_theme", theme);
-}
+(function initTheme() {
+  const t = localStorage.getItem("pk_theme") || "dark";
+  document.documentElement.setAttribute("data-theme", t);
+  document.getElementById("theme-toggle").textContent = t === "dark" ? "🌙" : "☀️";
+})();
 
 function toggleTheme() {
-  const current = document.documentElement.getAttribute("data-theme") || "dark";
-  applyTheme(current === "dark" ? "light" : "dark");
+  const cur = document.documentElement.getAttribute("data-theme") || "dark";
+  const nxt = cur === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", nxt);
+  document.getElementById("theme-toggle").textContent = nxt === "dark" ? "🌙" : "☀️";
+  localStorage.setItem("pk_theme", nxt);
 }
 
 // ── Tab Navigation ────────────────────────────────────────────────────────────
@@ -874,11 +756,7 @@ function switchTab(name) {
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
   document.getElementById(`panel-${name}`).classList.add("active");
   document.getElementById(`tab-${name}`).classList.add("active");
-
-  // Activate sentinel when switching back to keyboard tab
-  if (name === "keyboard") {
-    setTimeout(activateSentinel, 100);
-  }
+  if (name === "keyboard") setTimeout(activateSentinel, 100);
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
@@ -895,43 +773,28 @@ function onWsOpen() {
   reconnectDelay = RECONNECT_BASE_MS;
   setStatus("connecting", "Authenticating…");
   clearTimeout(reconnectTimer);
-  // Don't show main app yet — wait for auth_ok
 }
 
-function onWsMessage(event) {
+function onWsMessage(e) {
   let msg;
-  try { msg = JSON.parse(event.data); } catch { return; }
-
+  try { msg = JSON.parse(e.data); } catch { return; }
   switch (msg.type) {
-
     case "auth_ok":
-      isAuthenticated = true;
       myDeviceId = msg.device_id;
       setStatus("connected", "Connected ✓");
       showMainApp();
-      // Send device name if already set
       if (myDeviceName) {
         sendPayload({ action: "device_name", name: myDeviceName });
         document.getElementById("my-name-input").value = myDeviceName;
       }
       break;
-
-    case "auth_fail":
-      handleAuthFail(msg.reason);
-      break;
-
-    case "device_list":
-      renderDeviceList(msg.devices);
-      break;
-
-    case "clipboard_ack":
-      handleClipboardAck(msg.error);
-      break;
+    case "auth_fail":    handleAuthFail(msg.reason); break;
+    case "device_list":  renderDeviceList(msg.devices); break;
+    case "clipboard_ack":handleClipboardAck(msg.error); break;
   }
 }
 
 function onWsClose() {
-  isAuthenticated = false;
   setStatus("disconnected", "Reconnecting…");
   scheduleReconnect();
 }
@@ -949,30 +812,25 @@ function setStatus(state, label) {
   statusText.textContent = label;
 }
 
-function sendPayload(payload) {
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify(payload));
-  }
+function sendPayload(p) {
+  if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(p));
 }
 
-// ── PIN UI ────────────────────────────────────────────────────────────────────
+// ── PIN ───────────────────────────────────────────────────────────────────────
 function showMainApp() {
   pinOverlay.classList.add("hidden");
   mainApp.style.display = "block";
   setTimeout(activateSentinel, 200);
 }
 
-function pinKey(digit) {
+function pinKey(d) {
   if (pinBuffer.length >= 4) return;
-  pinBuffer += digit;
+  pinBuffer += d;
   updatePinDots();
-  if (pinBuffer.length === 4) {
-    setTimeout(submitPin, 80);
-  }
+  if (pinBuffer.length === 4) setTimeout(submitPin, 80);
 }
 
 function pinBackspace() {
-  if (pinBuffer.length === 0) return;
   pinBuffer = pinBuffer.slice(0, -1);
   updatePinDots();
 }
@@ -991,29 +849,24 @@ function submitPin() {
 }
 
 function handleAuthFail(reason) {
-  // Flash dots red
-  for (let i = 0; i < 4; i++) {
-    document.getElementById(`pd${i}`).classList.add("error");
-  }
+  for (let i = 0; i < 4; i++) document.getElementById(`pd${i}`).classList.add("error");
   document.getElementById("pin-error").textContent =
     reason === "wrong_pin" ? "❌ Incorrect PIN — try again" : "Connection error";
   pinBuffer = "";
   setTimeout(updatePinDots, 600);
 }
 
-// ── Modifier Helpers ──────────────────────────────────────────────────────────
+// ── Modifiers ─────────────────────────────────────────────────────────────────
 function pressActiveModifiers() {
-  Object.entries(modifiers).forEach(([mod, held]) => {
-    if (held) sendPayload({ action: "keydown", key: MOD_KEY[mod] });
-  });
+  Object.entries(modifiers).forEach(([m, h]) => { if (h) sendPayload({ action:"keydown", key:MOD_KEY[m] }); });
 }
 
 function releaseActiveModifiers() {
-  Object.entries(modifiers).forEach(([mod, held]) => {
-    if (held) {
-      sendPayload({ action: "keyup", key: MOD_KEY[mod] });
-      modifiers[mod] = false;
-      document.getElementById(`mod-${mod}`)?.classList.remove("active");
+  Object.entries(modifiers).forEach(([m, h]) => {
+    if (h) {
+      sendPayload({ action:"keyup", key:MOD_KEY[m] });
+      modifiers[m] = false;
+      document.getElementById(`mod-${m}`)?.classList.remove("active");
     }
   });
 }
@@ -1025,7 +878,7 @@ function toggleModifier(mod) {
   activateSentinel();
 }
 
-// ── Send Char / Special ───────────────────────────────────────────────────────
+// ── Key Send ──────────────────────────────────────────────────────────────────
 function sendChar(char) {
   pressActiveModifiers();
   sendPayload({ action: "keypress", key: char });
@@ -1034,30 +887,28 @@ function sendChar(char) {
   laptopCursorPos = cursorPos;
 }
 
-function sendSpecial(keyName) {
+function sendSpecial(key) {
   pressActiveModifiers();
-  sendPayload({ action: "keypress", key: keyName });
+  sendPayload({ action: "keypress", key });
   releaseActiveModifiers();
-  if (keyName === "CapsLock") capsLock = !capsLock;
-  vcApplySpecial(keyName);
+  if (key === "CapsLock") capsLock = !capsLock;
+  vcApplySpecial(key);
   laptopCursorPos = cursorPos;
 }
 
-function sendCombo(modifier, key) {
-  sendPayload({ action: "keydown",  key: modifier });
+function sendCombo(mod, key) {
+  sendPayload({ action: "keydown",  key: mod });
   sendPayload({ action: "keypress", key });
-  sendPayload({ action: "keyup",    key: modifier });
+  sendPayload({ action: "keyup",    key: mod });
 }
 
-function applyModsToChar(char) {
-  const shiftHeld = modifiers.Shift || modifiers.ShiftRight;
-  if (char.length === 1) {
-    const u = char.toUpperCase(), l = char.toLowerCase();
-    if (char !== u || char !== l) {
-      return (capsLock ? !shiftHeld : shiftHeld) ? u : l;
-    }
+function applyModsToChar(ch) {
+  const sh = modifiers.Shift || modifiers.ShiftRight;
+  if (ch.length === 1) {
+    const u = ch.toUpperCase(), l = ch.toLowerCase();
+    if (ch !== u || ch !== l) return (capsLock ? !sh : sh) ? u : l;
   }
-  return char;
+  return ch;
 }
 
 // ── Virtual Cursor ────────────────────────────────────────────────────────────
@@ -1067,66 +918,45 @@ function vcInsert(chars) {
   renderPreview();
 }
 
-function vcApplySpecial(keyName) {
-  switch (keyName) {
+function vcApplySpecial(key) {
+  switch (key) {
     case "Backspace":
       if (cursorPos > 0) {
-        const arr = [...previewText.slice(0, cursorPos)];
-        arr.pop();
-        const b = arr.join("");
-        previewText = b + previewText.slice(cursorPos);
-        cursorPos   = b.length;
-      }
-      break;
+        const a = [...previewText.slice(0, cursorPos)]; a.pop();
+        const b = a.join(""); previewText = b + previewText.slice(cursorPos); cursorPos = b.length;
+      } break;
     case "Delete":
       if (cursorPos < previewText.length) {
-        const a = [...previewText.slice(cursorPos)];
-        a.shift();
+        const a = [...previewText.slice(cursorPos)]; a.shift();
         previewText = previewText.slice(0, cursorPos) + a.join("");
-      }
-      break;
+      } break;
     case "Enter": vcInsert("\n"); return;
     case "Tab":   vcInsert("\t"); return;
     case "ArrowLeft":
-      if (cursorPos > 0)
-        cursorPos = [...previewText.slice(0, cursorPos)].slice(0, -1).join("").length;
+      if (cursorPos > 0) cursorPos = [...previewText.slice(0, cursorPos)].slice(0,-1).join("").length;
       break;
     case "ArrowRight":
-      if (cursorPos < previewText.length)
-        cursorPos += ([...previewText.slice(cursorPos)][0] || "").length;
+      if (cursorPos < previewText.length) cursorPos += ([...previewText.slice(cursorPos)][0]||"").length;
       break;
     case "ArrowUp": {
-      const ls = previewText.lastIndexOf("\n", cursorPos - 1);
-      const col = cursorPos - (ls + 1);
-      if (ls === -1) { cursorPos = 0; break; }
-      const pls = previewText.lastIndexOf("\n", ls - 1) + 1;
-      cursorPos = Math.min(pls + col, ls);
-      break;
+      const ls = previewText.lastIndexOf("\n", cursorPos-1);
+      const col = cursorPos-(ls+1);
+      if (ls===-1){cursorPos=0;break;}
+      const pls = previewText.lastIndexOf("\n", ls-1)+1;
+      cursorPos = Math.min(pls+col, ls); break;
     }
     case "ArrowDown": {
       const nl = previewText.indexOf("\n", cursorPos);
-      if (nl === -1) { cursorPos = previewText.length; break; }
-      const ls2 = previewText.lastIndexOf("\n", cursorPos - 1) + 1;
-      const col2 = cursorPos - ls2;
-      const nls = nl + 1;
-      const nle = previewText.indexOf("\n", nls);
-      const nll = (nle === -1 ? previewText.length : nle) - nls;
-      cursorPos = nls + Math.min(col2, nll);
-      break;
+      if (nl===-1){cursorPos=previewText.length;break;}
+      const ls2 = previewText.lastIndexOf("\n", cursorPos-1)+1;
+      const col2 = cursorPos-ls2;
+      const nls = nl+1, nle = previewText.indexOf("\n", nls);
+      const nll = (nle===-1?previewText.length:nle)-nls;
+      cursorPos = nls+Math.min(col2, nll); break;
     }
-    case "Home": {
-      const ls = previewText.lastIndexOf("\n", cursorPos - 1);
-      cursorPos = ls + 1;
-      break;
-    }
-    case "End": {
-      const ne = previewText.indexOf("\n", cursorPos);
-      cursorPos = ne === -1 ? previewText.length : ne;
-      break;
-    }
-    default:
-      flashDisplay();
-      return;
+    case "Home": { const ls=previewText.lastIndexOf("\n", cursorPos-1); cursorPos=ls+1; break; }
+    case "End":  { const ne=previewText.indexOf("\n", cursorPos); cursorPos=ne===-1?previewText.length:ne; break; }
+    default: flashDisplay(); return;
   }
   renderPreview();
 }
@@ -1135,21 +965,16 @@ function vcApplySpecial(keyName) {
 function syncLaptopCursor(newPos) {
   const delta = newPos - laptopCursorPos;
   if (delta === 0) return;
-
-  const key   = delta < 0 ? "ArrowLeft" : "ArrowRight";
-  const count = Math.abs(delta);
-
-  for (let i = 0; i < count; i++) {
-    sendPayload({ action: "keypress", key });
-  }
-
+  const key = delta < 0 ? "ArrowLeft" : "ArrowRight";
+  const n   = Math.abs(delta);
+  for (let i = 0; i < n; i++) sendPayload({ action: "keypress", key });
   laptopCursorPos = newPos;
-  syncIndicator.textContent = `↔ ${count} key${count > 1 ? "s" : ""} sent`;
+  syncIndicator.textContent = `↔ ${n} key${n>1?"s":""} sent`;
   syncIndicator.classList.add("show");
   setTimeout(() => syncIndicator.classList.remove("show"), 1200);
 }
 
-// ── Preview Render ─────────────────────────────────────────────────────────────
+// ── Preview Render ────────────────────────────────────────────────────────────
 function renderPreview() {
   liveDisplay.textContent = "";
   liveDisplay.appendChild(document.createTextNode(previewText.slice(0, cursorPos)));
@@ -1159,14 +984,14 @@ function renderPreview() {
   liveDisplay.appendChild(caret);
   liveDisplay.appendChild(document.createTextNode(previewText.slice(cursorPos)));
   placeholder.style.opacity = previewText.length === 0 ? "1" : "0";
-  caret.scrollIntoView({ block: "nearest", inline: "nearest" });
+  caret.scrollIntoView({ block:"nearest", inline:"nearest" });
   updateCursorInfo();
   flashDisplay();
 }
 
 function updateCursorInfo() {
   const lines = previewText.slice(0, cursorPos).split("\n");
-  cursorInfoEl.textContent = `col ${[...lines[lines.length-1]].length + 1} | row ${lines.length}`;
+  cursorInfoEl.textContent = `col ${[...lines[lines.length-1]].length+1} | row ${lines.length}`;
 }
 
 function flashDisplay() {
@@ -1179,8 +1004,7 @@ function flashDisplay() {
 // ── Tap-to-Reposition ─────────────────────────────────────────────────────────
 liveDisplay.addEventListener("pointerdown", (e) => {
   e.preventDefault();
-  let charOffset = previewText.length;
-
+  let offset = previewText.length;
   try {
     let node = null, off = 0;
     if (document.caretRangeFromPoint) {
@@ -1190,12 +1014,12 @@ liveDisplay.addEventListener("pointerdown", (e) => {
       const p = document.caretPositionFromPoint(e.clientX, e.clientY);
       if (p) { node = p.offsetNode; off = p.offset; }
     }
-    if (node) charOffset = domOffsetToText(node, off);
-  } catch (_) {}
+    if (node) offset = domToText(node, off);
+  } catch(_) {}
 
-  const newPos = Math.max(0, Math.min(charOffset, previewText.length));
-  syncLaptopCursor(newPos);
-  cursorPos = newPos;
+  const np = Math.max(0, Math.min(offset, previewText.length));
+  syncLaptopCursor(np);
+  cursorPos = np;
   renderPreview();
 
   if (document.activeElement === sentinelEl) {
@@ -1206,50 +1030,40 @@ liveDisplay.addEventListener("pointerdown", (e) => {
   }
 });
 
-function domOffsetToText(targetNode, offsetInNode) {
+function domToText(target, offInNode) {
   let total = 0;
-  function walk(node) {
-    if (node === targetNode) return true;
-    if (node.nodeType === Node.TEXT_NODE) { total += node.textContent.length; return false; }
-    if (node.classList?.contains("v-caret")) return false;
-    for (const c of node.childNodes) { if (walk(c)) return true; }
+  function walk(n) {
+    if (n === target) return true;
+    if (n.nodeType === Node.TEXT_NODE) { total += n.textContent.length; return false; }
+    if (n.classList?.contains("v-caret")) return false;
+    for (const c of n.childNodes) { if (walk(c)) return true; }
     return false;
   }
   walk(liveDisplay);
-  return total + offsetInNode;
+  return total + offInNode;
 }
 
 // ── Sentinel ──────────────────────────────────────────────────────────────────
 sentinelEl.addEventListener("input", () => {
-  const current = sentinelEl.value;
-  if (current === SENTINEL) return;
-
-  if (current.length > SENTINEL.length) {
-    for (const ch of current.slice(SENTINEL.length)) {
-      if (ch !== SENTINEL) sendChar(ch);
-    }
-  } else if (current.length === 0) {
+  const cur = sentinelEl.value;
+  if (cur === SENTINEL) return;
+  if (cur.length > SENTINEL.length) {
+    for (const ch of cur.slice(SENTINEL.length)) { if (ch !== SENTINEL) sendChar(ch); }
+  } else if (cur.length === 0) {
     sendSpecial("Backspace");
   }
-
   sentinelEl.value = SENTINEL;
-  sentinelEl.setSelectionRange(SENTINEL.length, SENTINEL.length);
 });
 
 sentinelEl.addEventListener("keydown", (e) => {
   if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End"].includes(e.key)) {
-    e.preventDefault();
-    return;
+    e.preventDefault(); return;
   }
   if (e.key === "Backspace" && sentinelEl.value === SENTINEL) {
-    e.preventDefault();
-    sendSpecial("Backspace");
-    return;
+    e.preventDefault(); sendSpecial("Backspace"); return;
   }
   if (e.key === "Enter") {
-    e.preventDefault();
-    sendSpecial("Enter");
-    sentinelEl.value = SENTINEL;
+    e.preventDefault(); sendSpecial("Enter"); sentinelEl.value = SENTINEL;
   }
 });
 
@@ -1274,233 +1088,159 @@ function activateSentinel() {
 }
 
 function clearDisplay() {
-  previewText = ""; cursorPos = 0; laptopCursorPos = 0;
-  liveDisplay.textContent = "";
-  placeholder.style.opacity = "1";
+  previewText=""; cursorPos=0; laptopCursorPos=0;
+  liveDisplay.textContent=""; placeholder.style.opacity="1";
   updateCursorInfo();
 }
 
 // ── Mouse Trackpad ────────────────────────────────────────────────────────────
-const trackpad      = document.getElementById("trackpad-area");
-let trackpadTouches = {};
-let lastTrackpadPos = null;
-let trackpadTapTimer= null;
+const trackpad = document.getElementById("trackpad-area");
+let tpTouches  = {}, tpTapTimer = null;
 
 trackpad.addEventListener("touchstart", (e) => {
   e.preventDefault();
   trackpad.classList.add("active-touch");
-
   Array.from(e.changedTouches).forEach(t => {
-    trackpadTouches[t.identifier] = { x: t.clientX, y: t.clientY, startX: t.clientX, startY: t.clientY };
+    tpTouches[t.identifier] = { x:t.clientX, y:t.clientY, sx:t.clientX, sy:t.clientY };
   });
-
-  if (Object.keys(trackpadTouches).length === 1) {
-    // Single finger start — potential tap
-    trackpadTapTimer = setTimeout(() => { trackpadTapTimer = null; }, 250);
+  if (Object.keys(tpTouches).length === 1) {
+    tpTapTimer = setTimeout(() => { tpTapTimer = null; }, 250);
   }
-}, { passive: false });
+}, { passive:false });
 
 trackpad.addEventListener("touchmove", (e) => {
   e.preventDefault();
-  const touchCount = e.touches.length;
-
-  if (touchCount === 1) {
-    // ── Single finger: move mouse ─────────────────────────────────────────
-    const t   = e.touches[0];
-    const ref = trackpadTouches[t.identifier];
-    if (!ref) return;
-
-    const dx = (t.clientX - ref.x) * mouseSpeedMult;
-    const dy = (t.clientY - ref.y) * mouseSpeedMult;
-
+  const tc = e.touches.length;
+  if (tc === 1) {
+    const t = e.touches[0], r = tpTouches[t.identifier];
+    if (!r) return;
+    const dx = (t.clientX - r.x) * mouseSpeedMult;
+    const dy = (t.clientY - r.y) * mouseSpeedMult;
     if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
-      sendPayload({ action: "mouse_move", dx: dx, dy: dy });
-      trackpadTouches[t.identifier] = { ...ref, x: t.clientX, y: t.clientY };
-      trackpadTapTimer = null;    // moved → not a tap
+      sendPayload({ action:"mouse_move", dx, dy });
+      tpTouches[t.identifier] = { ...r, x:t.clientX, y:t.clientY };
+      tpTapTimer = null;
     }
-
-  } else if (touchCount === 2) {
-    // ── Two fingers: scroll ───────────────────────────────────────────────
-    const t0 = e.touches[0], t1 = e.touches[1];
-    const r0 = trackpadTouches[t0.identifier], r1 = trackpadTouches[t1.identifier];
+  } else if (tc === 2) {
+    const t0=e.touches[0], t1=e.touches[1];
+    const r0=tpTouches[t0.identifier], r1=tpTouches[t1.identifier];
     if (!r0 || !r1) return;
-
-    const dy0 = t0.clientY - r0.y, dy1 = t1.clientY - r1.y;
-    const avgDy = (dy0 + dy1) / 2;
-    const dx0 = t0.clientX - r0.x, dx1 = t1.clientX - r1.x;
-    const avgDx = (dx0 + dx1) / 2;
-
-    const scrollY = -(avgDy / 30);   // negative = natural scroll
-    const scrollX = avgDx / 30;
-
-    if (Math.abs(scrollY) > 0.1 || Math.abs(scrollX) > 0.1) {
-      sendPayload({ action: "mouse_scroll", dx: scrollX, dy: scrollY });
+    const avgDy = ((t0.clientY-r0.y)+(t1.clientY-r1.y))/2;
+    const avgDx = ((t0.clientX-r0.x)+(t1.clientX-r1.x))/2;
+    if (Math.abs(avgDy)>1 || Math.abs(avgDx)>1) {
+      sendPayload({ action:"mouse_scroll", dx:avgDx/30, dy:-avgDy/30 });
     }
-
-    trackpadTouches[t0.identifier] = { ...r0, x: t0.clientX, y: t0.clientY };
-    trackpadTouches[t1.identifier] = { ...r1, x: t1.clientX, y: t1.clientY };
+    tpTouches[t0.identifier] = { ...r0, x:t0.clientX, y:t0.clientY };
+    tpTouches[t1.identifier] = { ...r1, x:t1.clientX, y:t1.clientY };
   }
-}, { passive: false });
+}, { passive:false });
 
 trackpad.addEventListener("touchend", (e) => {
   e.preventDefault();
-  const touchCount  = e.touches.length;
-  const endedCount  = e.changedTouches.length;
-
-  // Detect taps (finger lifted quickly without significant movement)
-  if (touchCount === 0) {
-    if (trackpadTapTimer !== null) {
-      // All fingers lifted quickly — detect how many ended
-      clearTimeout(trackpadTapTimer);
-      trackpadTapTimer = null;
-
-      const totalReleased = endedCount;
-      if (totalReleased === 1) {
-        // Check movement distance
-        const t = e.changedTouches[0];
-        const ref = trackpadTouches[t.identifier];
-        if (ref) {
-          const dist = Math.hypot(t.clientX - ref.startX, t.clientY - ref.startY);
-          if (dist < 10) {
-            // Short tap → left click
-            spawnRipple(t.clientX, t.clientY);
-            sendPayload({ action: "mouse_click", button: "left" });
-          }
-        }
-      } else if (totalReleased === 2) {
-        // Two-finger tap → right click
-        const t = e.changedTouches[0];
+  const tc = e.touches.length;
+  const ec = e.changedTouches.length;
+  if (tc === 0 && tpTapTimer !== null) {
+    clearTimeout(tpTapTimer); tpTapTimer = null;
+    const t = e.changedTouches[0], r = tpTouches[t.identifier];
+    if (r) {
+      const dist = Math.hypot(t.clientX-r.sx, t.clientY-r.sy);
+      if (dist < 10) {
         spawnRipple(t.clientX, t.clientY);
-        sendPayload({ action: "mouse_click", button: "right" });
+        const btn = ec >= 2 ? "right" : "left";
+        sendPayload({ action:"mouse_click", button:btn });
       }
     }
     trackpad.classList.remove("active-touch");
   }
+  Array.from(e.changedTouches).forEach(t => delete tpTouches[t.identifier]);
+  if (tc === 0) trackpad.classList.remove("active-touch");
+}, { passive:false });
 
-  Array.from(e.changedTouches).forEach(t => {
-    delete trackpadTouches[t.identifier];
-  });
-}, { passive: false });
-
-function spawnRipple(clientX, clientY) {
-  const rect   = trackpad.getBoundingClientRect();
-  const ripple = document.createElement("div");
-  ripple.className = "trackpad-ripple";
-  ripple.style.left = (clientX - rect.left) + "px";
-  ripple.style.top  = (clientY - rect.top)  + "px";
-  trackpad.appendChild(ripple);
-  setTimeout(() => ripple.remove(), 400);
+function spawnRipple(cx, cy) {
+  const rect = trackpad.getBoundingClientRect();
+  const r = document.createElement("div");
+  r.className = "tp-ripple";
+  r.style.left = (cx-rect.left)+"px";
+  r.style.top  = (cy-rect.top) +"px";
+  trackpad.appendChild(r);
+  setTimeout(() => r.remove(), 400);
 }
 
-function mouseClick(button) {
-  sendPayload({ action: "mouse_click", button, double: false });
-}
-
-function mouseDoubleClick(button) {
-  sendPayload({ action: "mouse_click", button, double: true });
-}
-
-function mouseScroll(dx, dy) {
-  sendPayload({ action: "mouse_scroll", dx, dy });
-}
-
-function updateSpeed(val) {
-  mouseSpeedMult = val / 5;     // slider 1-10 → multiplier 0.2-2.0
-  document.getElementById("speed-val").textContent = val;
-}
+function mouseClick(b)       { sendPayload({ action:"mouse_click",  button:b, double:false }); }
+function mouseDoubleClick(b) { sendPayload({ action:"mouse_click",  button:b, double:true  }); }
+function mouseScroll(dx,dy)  { sendPayload({ action:"mouse_scroll", dx, dy }); }
+function updateSpeed(v)      { mouseSpeedMult=v/5; document.getElementById("speed-val").textContent=v; }
 
 // ── Clipboard ─────────────────────────────────────────────────────────────────
 function sendClipboard() {
   const text = document.getElementById("clipboard-textarea").value.trim();
-  if (!text) {
-    showClipboardStatus("⚠️ Nothing to send", "error");
-    return;
-  }
-
+  if (!text) { showClipSt("⚠️ Nothing to send","error"); return; }
   document.getElementById("clipboard-send").disabled = true;
-  showClipboardStatus("Sending…", "");
-  sendPayload({ action: "clipboard_push", text });
+  showClipSt("Sending…","");
+  sendPayload({ action:"clipboard_push", text });
 }
 
 function sendClipboardThenPaste() {
   const text = document.getElementById("clipboard-textarea").value.trim();
-  if (!text) {
-    showClipboardStatus("⚠️ Nothing to send", "error");
-    return;
-  }
-
+  if (!text) { showClipSt("⚠️ Nothing to send","error"); return; }
   document.getElementById("clipboard-send").disabled = true;
-  showClipboardStatus("Sending…", "");
-  // Server will handle clipboard_push; after ack we auto-paste
-  _pendingPasteAfterClipboard = true;
-  sendPayload({ action: "clipboard_push", text });
+  _pendingPaste = true;
+  showClipSt("Sending…","");
+  sendPayload({ action:"clipboard_push", text });
 }
-
-let _pendingPasteAfterClipboard = false;
 
 function handleClipboardAck(error) {
   document.getElementById("clipboard-send").disabled = false;
   if (error) {
-    showClipboardStatus(`❌ ${error}`, "error");
+    showClipSt(`❌ ${error}`, "error");
   } else {
-    showClipboardStatus("✅ Sent to laptop clipboard!", "success");
-    if (_pendingPasteAfterClipboard) {
-      _pendingPasteAfterClipboard = false;
-      setTimeout(() => sendCombo("Control", "v"), 150);
-    }
+    showClipSt("✅ Sent to laptop clipboard!", "success");
+    if (_pendingPaste) { _pendingPaste=false; setTimeout(() => sendCombo("Control","v"), 150); }
   }
-  setTimeout(() => showClipboardStatus("", ""), 3000);
+  setTimeout(() => showClipSt("",""), 3000);
 }
 
-function showClipboardStatus(msg, cls) {
+function showClipSt(msg, cls) {
   const el = document.getElementById("clipboard-status");
-  el.textContent = msg;
-  el.className   = cls;
+  el.textContent=msg; el.className=cls;
 }
 
 // ── Device List ───────────────────────────────────────────────────────────────
 function renderDeviceList(devices) {
   const list = document.getElementById("device-list");
-  if (!devices || devices.length === 0) {
-    list.innerHTML = `<div style="font-size:.85rem;color:var(--text-dim);text-align:center;padding:16px">
-      No devices connected yet…</div>`;
+  if (!devices?.length) {
+    list.innerHTML=`<div style="font-size:.83rem;color:var(--text-dim);text-align:center;padding:14px;">No devices connected…</div>`;
     return;
   }
-
   list.innerHTML = devices.map(d => {
-    const isMe   = d.id === myDeviceId;
-    const initials = (d.name || "?").charAt(0).toUpperCase();
-    return `
-      <div class="device-card ${isMe ? "is-me" : ""}">
-        <div class="device-avatar">${initials}</div>
-        <div class="device-info">
-          <div class="device-name">${escapeHtml(d.name || "Unknown")}</div>
-          <div class="device-sub">${isMe ? "📍 This device" : "📱 Connected"}</div>
-        </div>
-        ${isMe ? '<span style="color:var(--accent);font-size:0.75rem;font-weight:700;">YOU</span>' : ""}
+    const isMe = d.id === myDeviceId;
+    return `<div class="device-card ${isMe?"is-me":""}">
+      <div class="d-avatar">${(d.name||"?").charAt(0).toUpperCase()}</div>
+      <div class="d-info">
+        <div class="d-name">${esc(d.name||"Unknown")}</div>
+        <div class="d-sub">${isMe?"📍 This device":"📱 Connected"}</div>
       </div>
-    `;
+      ${isMe?'<span style="color:var(--accent);font-size:.72rem;font-weight:700;">YOU</span>':""}
+    </div>`;
   }).join("");
 }
 
 function saveDeviceName() {
-  const input = document.getElementById("my-name-input");
-  const name  = input.value.trim();
-  if (!name) return;
-  myDeviceName = name;
-  localStorage.setItem("phonekey_device_name", name);
-  sendPayload({ action: "device_name", name });
-
+  const v = document.getElementById("my-name-input").value.trim();
+  if (!v) return;
+  myDeviceName = v;
+  localStorage.setItem("pk_name", v);
+  sendPayload({ action:"device_name", name:v });
   const btn = document.getElementById("save-name-btn");
-  btn.textContent = "✅ Saved!";
-  setTimeout(() => btn.textContent = "💾 Save Name", 1500);
+  btn.textContent="✅ Saved!";
+  setTimeout(()=>btn.textContent="💾 Save Name", 1500);
 }
 
-function escapeHtml(str) {
-  return str.replace(/&/g,"&").replace(/</g,"<").replace(/>/g,">");
+function esc(s) {
+  return s.replace(/&/g,"&").replace(/</g,"<").replace(/>/g,">");
 }
 
-// ── Page Visibility API ───────────────────────────────────────────────────────
+// ── Page Visibility ───────────────────────────────────────────────────────────
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && (!socket || socket.readyState !== WebSocket.OPEN)) {
     clearTimeout(reconnectTimer);
@@ -1510,12 +1250,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-// Restore device name in input
-if (myDeviceName) {
-  document.getElementById("my-name-input").value = myDeviceName;
-}
-
-// Initial render
+if (myDeviceName) document.getElementById("my-name-input").value = myDeviceName;
 renderPreview();
 connect();
 </script>

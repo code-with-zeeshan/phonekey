@@ -1,6 +1,6 @@
-# 📱→💻 PhoneKey v3.0.0
+# 📱→💻 PhoneKey v3.1.0
 
-> Advanced phone-as-keyboard with mouse control, clipboard sync, and secure connections — lightweight, real-time, zero-install on phone.
+> Advanced phone-as-keyboard with mouse control, clipboard sync, secure connections, browser chooser, and sticky UI — lightweight, real-time, zero-install on phone.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://python.org)
@@ -8,9 +8,9 @@
 
 ---
 
-## 🧠 Why PhoneKey v3.0.0?
+## 🧠 Why PhoneKey v3.1.0?
 
-| Problem | PhoneKey v3.0.0 Solution |
+| Problem | PhoneKey v3.1.0 Solution |
 |---|---|
 | Forgot physical keyboard | Full keyboard with modifier keys & function keys |
 | Need mouse control | Touch trackpad with gestures (move, click, scroll) |
@@ -23,6 +23,9 @@
 | Other tools require app install | Pure browser — no downloads needed |
 | Slow response | WebSocket over LAN (<5ms latency) |
 | Theme preferences | Dark/light mode toggle with persistence |
+| Hard to open in browser | /launch page for browser selection |
+| UI scrolls away | Sticky header and tab bar for fixed navigation |
+| Windows .exe crashes on close | Console control handler for graceful shutdown |
 
 ---
 
@@ -219,7 +222,7 @@ The terminal will show:
 
 ```
 ╔══════════════════════════════════════════════╗
-║         📱  PhoneKey  v3.0.0  💻            ║
+║         📱  PhoneKey  v3.1.0  💻            ║
 ╠══════════════════════════════════════════════════╣
 ║  OS      : Windows                              ║
 ║  Mode    : HTTPS/WSS 🔒                         ║
