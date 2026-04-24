@@ -653,18 +653,438 @@ def build_ssl_context(local_ip: str) -> ssl.SSLContext:
 
 _WS_PORT:    int = DEFAULT_WS_PORT
 _USE_HTTPS:  bool = False
-_LAUNCH_URL: str = ""  # Deprecated - no longer used (direct QR URL)
+
+def _build_welcome_page(main_url: str, ws_port: int) -> str:
+    """
+    Returns a beautiful welcome page shown when user visits the PhoneKey URL.
+    Shows opening message with browser info and auto-redirects to app.
+    """
+    ws_proto = "wss" if _USE_HTTPS else "ws"
+    ws_url = f"{ws_proto}://{main_url.split('://')[1].rsplit(':', 1)[0]}:{ws_port}"
+    
+    import urllib.parse
+    encoded_url = urllib.parse.quote(main_url, safe="")
+    
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#0a0c14"/>
+<title>Opening PhoneKey</title>
+<!-- Multi-size favicon -->
+<link rel="icon" href="/phonekey.ico" sizes="any"/>
+<link rel="icon" type="image/svg+xml" href="/phonekey.svg"/>
+<link rel="apple-touch-icon" href="/phonekey.ico"/>
+<!-- Preload favicon for instant display -->
+<link rel="preload" href="/phonekey.ico" as="image" type="image/x-icon"/>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  html {{ scroll-behavior: smooth; }}
+  body {{
+    background: #0a0c14;
+    color: #e8eaf6;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    overflow-x: hidden;
+  }}
+  
+  /* Animated background */
+  body::before {{
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: 
+      radial-gradient(ellipse at 20% 20%, rgba(108, 99, 255, 0.12) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 80%, rgba(76, 69, 220, 0.10) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 50%, rgba(40, 42, 60, 0.5) 0%, transparent 70%);
+    animation: bgPulse 8s ease-in-out infinite;
+    z-index: 0;
+  }}
+  
+  @keyframes bgPulse {{
+    0%, 100% {{ opacity: 1; }}
+    50% {{ opacity: 0.7; }}
+  }}
+  
+  .container {{
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    max-width: 420px;
+    width: 100%;
+  }}
+  
+  /* Logo animation */
+  .logo-anim {{
+    font-size: 3.5rem;
+    margin-bottom: 12px;
+    animation: logoFloat 3s ease-in-out infinite;
+  }}
+  
+  @keyframes logoFloat {{
+    0%, 100% {{ transform: translateY(0); }}
+    50% {{ transform: translateY(-8px); }}
+  }}
+  
+  .logo-anim .key-icon {{
+    display: inline-block;
+    font-size: 2.2rem;
+    vertical-align: middle;
+    margin-right: 6px;
+  }}
+  
+  .logo-anim .text-icon {{
+    display: inline-block;
+    font-size: 2rem;
+    vertical-align: middle;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }}
+  
+  h1 {{
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #e8eaf6 0%, #c5c6e0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }}
+  
+  .subtitle {{
+    font-size: 0.95rem;
+    color: #9e9eb8;
+    margin-bottom: 32px;
+    line-height: 1.6;
+  }}
+  
+  /* Browser card */
+  .browser-card {{
+    background: rgba(28, 31, 46, 0.8);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(108, 99, 255, 0.2);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 24px;
+    text-align: left;
+  }}
+  
+  .browser-label {{
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #6c63ff;
+    margin-bottom: 8px;
+  }}
+  
+  .browser-name {{
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #e8eaf6;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }}
+  
+  .browser-icon {{
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+  }}
+  
+  .browser-icon.chrome {{ background: linear-gradient(135deg, #4285f4, #34a853, #fbbc05, #ea4335); }}
+  .browser-icon.safari {{ background: linear-gradient(135deg, #007aff, #5ac8fa); }}
+  .browser-icon.firefox {{ background: linear-gradient(135deg, #ff9500, #ff2d55); }}
+  .browser-icon.edge {{ background: linear-gradient(135deg, #0078d7, #00bcf2); }}
+  .browser-icon.brave {{ background: linear-gradient(135deg, #fb542b, #e62e19); }}
+  .browser-icon.opera {{ background: linear-gradient(135deg, #ff1b2d, #0096ff); }}
+  
+  /* Action buttons */
+  .btn-primary {{
+    width: 100%;
+    padding: 16px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #6c63ff, #5b52e0);
+    border: none;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 20px rgba(108, 99, 255, 0.3);
+  }}
+  
+  .btn-primary:hover {{
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(108, 99, 255, 0.4);
+  }}
+  
+  .btn-primary:active {{
+    transform: translateY(0);
+  }}
+  
+  .btn-secondary {{
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    background: rgba(28, 31, 46, 0.6);
+    border: 1px solid rgba(108, 99, 255, 0.2);
+    color: #9e9eb8;
+    font-size: 0.88rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 10px;
+  }}
+  
+  .btn-secondary:hover {{
+    border-color: #6c63ff;
+    color: #e8eaf6;
+  }}
+  
+  /* Countdown */
+  .countdown {{
+    margin-top: 20px;
+    font-size: 0.85rem;
+    color: #6c63ff;
+    font-weight: 500;
+  }}
+  
+  .countdown span {{
+    font-weight: 700;
+    font-size: 1.1rem;
+  }}
+  
+  /* Progress bar */
+  .progress-bar {{
+    height: 3px;
+    background: rgba(108, 99, 255, 0.2);
+    border-radius: 2px;
+    margin-top: 20px;
+    overflow: hidden;
+  }}
+  
+  .progress-fill {{
+    height: 100%;
+    background: linear-gradient(90deg, #6c63ff, #5b52e0);
+    border-radius: 2px;
+    transition: width 0.3s;
+  }}
+  
+  /* Tip */
+  .tip {{
+    margin-top: 24px;
+    padding: 12px 16px;
+    background: rgba(108, 99, 255, 0.08);
+    border-radius: 10px;
+    border-left: 3px solid #6c63ff;
+  }}
+  
+  .tip-text {{
+    font-size: 0.82rem;
+    color: #9e9eb8;
+    line-height: 1.5;
+  }}
+  
+  .tip-text strong {{
+    color: #e8eaf6;
+  }}
+  
+  @media (prefers-reduced-motion: reduce) {{
+    *, *::before, *::after {{
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }}
+  }}
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo-anim">
+      <span class="key-icon">🔐</span>
+      <span class="text-icon">PhoneKey</span>
+    </div>
+    
+    <h1>Opening PhoneKey</h1>
+    <p class="subtitle">Launching in your default browser for a seamless experience</p>
+    
+    <div class="browser-card">
+      <div class="browser-label">Detected Browser</div>
+      <div class="browser-name">
+        <div class="browser-icon chrome">🌐</div>
+        <span id="browser-name">Chrome</span>
+      </div>
+    </div>
+    
+    <button class="btn-primary" onclick="openInBrowser()" id="open-btn">
+      <span>🚀 Open in Browser</span>
+    </button>
+    
+    <button class="btn-secondary" onclick="chooseBrowser()">
+      Choose Another Browser
+    </button>
+    
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+    
+    <div class="countdown">
+      Auto-opening in <span id="countdown">5</span>s
+    </div>
+    
+    <div class="tip">
+      <p class="tip-text">
+        <strong>Tip:</strong> Bookmark this page or add to home screen for quick access.
+      </p>
+    </div>
+  </div>
+  
+  <script>
+    const mainUrl = '{main_url}';
+    const wsUrl = '{ws_url}';
+    const encodedUrl = '{encoded_url}';
+    
+    // Detect browser
+    function detectBrowser() {{
+      const ua = navigator.userAgent;
+      if (ua.includes('Edg')) return {{ name: 'Microsoft Edge', icon: 'edge' }};
+      if (ua.includes('OPR') || ua.includes('Opera')) return {{ name: 'Opera', icon: 'opera' }};
+      if (ua.includes('Firefox')) return {{ name: 'Firefox', icon: 'firefox' }};
+      if (ua.includes('Safari') && !ua.includes('Chrome')) return {{ name: 'Safari', icon: 'safari' }};
+      if (ua.includes('Chrome')) return {{ name: 'Chrome', icon: 'chrome' }};
+      if (ua.includes('Brave')) return {{ name: 'Brave', icon: 'brave' }};
+      return {{ name: 'Browser', icon: 'chrome' }};
+    }}
+    
+    const browser = detectBrowser();
+    document.getElementById('browser-name').textContent = browser.name;
+    document.querySelector('.browser-icon').className = `browser-icon ${browser.icon}`;
+    
+    // Browser choice URLs
+    const browserUrls = {{
+      chrome: `googlechrome://${{mainUrl.split('://')[1]}}`,
+      safari: mainUrl,
+      firefox: `firefox://open-url?url=${{encodedUrl}}`,
+      edge: `microsoft-edge://${{mainUrl.split('://')[1]}}`,
+      brave: mainUrl,
+      opera: mainUrl,
+      default: mainUrl
+    }};
+    
+    // Open in detected browser
+    function openInBrowser() {{
+      const url = browserUrls[browser.icon] || browserUrls.default;
+      window.location.href = url;
+    }}
+    
+    // Show browser choice
+    function chooseBrowser() {{
+      const choices = [
+        {{ name: 'Chrome', icon: 'chrome', url: browserUrls.chrome }},
+        {{ name: 'Safari', icon: 'safari', url: browserUrls.safari }},
+        {{ name: 'Firefox', icon: 'firefox', url: browserUrls.firefox }},
+        {{ name: 'Edge', icon: 'edge', url: browserUrls.edge }},
+      ];
+      
+      const html = `
+        <div style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;" onclick="this.remove()">
+          <div style="background:#0a0c14;border-radius:16px;padding:24px;max-width:360px;width:100%;border:1px solid rgba(108,99,255,0.3)">
+            <h3 style="font-size:1.1rem;margin-bottom:16px;text-align:center;color:#e8eaf6">Choose Browser</h3>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              ${{choices.map(c => `
+                <button onclick="window.location.href='${{c.url}}';this.parentElement.parentElement.parentElement.remove()" style="display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;background:rgba(28,31,46,0.8);border:1px solid rgba(108,99,255,0.2);color:#e8eaf6;font-size:1rem;cursor:pointer;width:100%;transition:all 0.2s;text-align:left">
+                  <div class="browser-icon ${{c.icon}}" style="width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.2rem">${{c.icon==='chrome'?'🌐':c.icon==='safari'?'🧭':c.icon==='firefox'?'🦊':'🔷'}}</div>
+                  <span>${{c.name}}</span>
+                </button>
+              `).join('')}}
+            </div>
+            <button onclick="this.parentElement.parentElement.remove()" style="margin-top:16px;padding:12px;width:100%;border-radius:10px;border:1px solid rgba(108,99,255,0.2);background:transparent;color:#9e9eb8;cursor:pointer">Cancel</button>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', html);
+    }}
+    
+    // Auto-redirect countdown
+    let seconds = 5;
+    const countdownEl = document.getElementById('countdown');
+    const progressEl = document.getElementById('progress-fill');
+    
+    const timer = setInterval(() => {{
+      seconds--;
+      countdownEl.textContent = seconds;
+      progressEl.style.width = `${{(5 - seconds) / 5 * 100}}%`;
+      
+      if (seconds <= 0) {{
+        clearInterval(timer);
+        openInBrowser();
+      }}
+    }}, 1000);
+    
+    // Pause countdown on hover
+    document.querySelector('.container').addEventListener('mouseenter', () => {{
+      clearInterval(timer);
+    }});
+    
+    document.querySelector('.container').addEventListener('mouseleave', () => {{
+      // Resume countdown
+      timer = setInterval(() => {{
+        seconds--;
+        countdownEl.textContent = seconds;
+        progressEl.style.width = `${{(5 - seconds) / 5 * 100}}%`;
+        if (seconds <= 0) {{
+          clearInterval(timer);
+          openInBrowser();
+        }}
+      }}, 1000);
+    }});
+  </script>
+</body>
+</html>"""
+
 
 
 class PhoneKeyHTTPHandler(BaseHTTPRequestHandler):
     """
     Custom HTTP handler that:
-    - Serves / and /index.html → PhoneKey UI
+    - Serves / → welcome page with browser info
+    - Serves /index.html → main PhoneKey UI
     - Serves all other static files from CLIENT_DIR
     - Suppresses access logs
     """
 
     def do_GET(self):
+        # ── Root path → welcome page ────────────────────────────────────────
+        if self.path == "/":
+            proto = "https" if _USE_HTTPS else "http"
+            main_url = f"{proto}://{self.headers.get('Host', 'localhost')}"
+            page = _build_welcome_page(main_url, _WS_PORT).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(page)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(page)
+            return
+
         # ── Static files from CLIENT_DIR ──────────────────────────────────
         path = self.path.split("?")[0].lstrip("/") or "index.html"
         file_path = CLIENT_DIR / path
@@ -690,6 +1110,12 @@ class PhoneKeyHTTPHandler(BaseHTTPRequestHandler):
         mime = mime_map.get(suffix, "application/octet-stream")
 
         content = file_path.read_bytes()
+        # Inject PIN status into index.html
+        if file_path.name == "index.html" and SESSION_PIN is not None:
+            content = content.replace(
+                b'const SENTINEL',
+                f'const SESSION_PIN = "{SESSION_PIN}";\nconst SENTINEL'.encode()
+            )
         self.send_response(200)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(content)))

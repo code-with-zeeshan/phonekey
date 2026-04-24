@@ -68,12 +68,13 @@
 
 ---
 
-## 🚀 v3.0.0 New Features
+## 🚀 v3.1.0 New Features
 
 ### 🔐 Security & Authentication
 - **4-Digit PIN**: Secure connection with optional PIN authentication
 - **HTTPS/WSS**: Auto-generated self-signed certificates for encrypted connections
 - **Connection Deduplication**: Prevents duplicate connections from same browser tab
+- **Enhanced SSL Certificate Reuse**: Improved certificate validation with IP address matching for better compatibility
 
 ### 🖱️ Advanced Input Control
 - **Mouse Trackpad**: Touch gestures for cursor movement, clicking, and scrolling
@@ -90,14 +91,22 @@
 - **Dark/Light Theme**: Persistent theme toggle with system preference detection
 - **Tab-Based UI**: Organized interface (Keyboard, Mouse, Clipboard, Devices)
 - **QR Code Display**: Terminal QR codes for instant URL sharing
+- **Direct QR Connection**: Removed browser chooser page — direct connection via QR code scan
 - **Responsive Design**: Optimized for all mobile screen sizes
+- **UI Refinements**: Updated favicon, logo styling with icon, theme toggle size adjustment, footer text enhancement
 
 ### 🛠️ Developer Features
 - **CLI Arguments**: Custom ports, HTTPS mode, PIN disable, mouse speed
-- **Environment Config**: All settings configurable via environment variables
 - **Type Hints**: Full Python type annotations for maintainability
 - **Unit Tests**: Test coverage for core functionality
 - **Connection Metrics**: Active connection counting and logging
+- **Tab-ID Deduplication**: Prevent duplicate connections from same browser tab using tab_id tracking
+
+### 🐛 Fixes & Improvements
+- **PyInstaller Exclusions**: Removed problematic imports (`"email"`, `"urllib"`, `"html"`) causing build failures
+- **Connection Metrics**: Ensured proper cleanup on disconnect
+- **Duplicate Tab Connections**: Fixed race condition in device registration with atomic tab_id checking
+- **Simplified Authentication Flow**: Direct connection with optional PIN verification
 
 ---
 
@@ -111,21 +120,30 @@
 
 ## ⚙️ Configuration
 
-PhoneKey supports configuration via environment variables:
+PhoneKey supports configuration via command-line arguments:
 
-| Variable | Default | Description |
+| Argument | Default | Description |
 |----------|---------|-------------|
-| `PHONEKEY_WS_PORT` | 8765 | WebSocket server port |
-| `PHONEKEY_HTTP_PORT` | 8080 | HTTP server port for client UI |
-| `PHONEKEY_LOCK_PORT` | 18765 | Internal socket lock port |
-| `PHONEKEY_KEY_DELAY` | 0.012 | Delay between keystrokes (seconds) |
-| `PHONEKEY_PING_INTERVAL` | 30 | WebSocket ping interval (seconds) |
-| `PHONEKEY_PING_TIMEOUT` | 60 | WebSocket ping timeout (seconds) |
+| `--ws-port` | 8765 | WebSocket server port |
+| `--http-port` | 8080 | HTTP server port for client UI |
+| `--https` | False | Enable HTTPS/WSS (auto-generates self-signed cert) |
+| `--no-pin` | False | Disable 4-digit PIN authentication |
+| `--mouse-speed` | 1.0 | Mouse speed multiplier (0.1-5.0) |
 
 Example:
 ```bash
-PHONEKEY_WS_PORT=9999 PHONEKEY_HTTP_PORT=8888 python server.py
+python server.py --ws-port 9000 --http-port 9001 --https --mouse-speed 2.0
 ```
+
+### Constants (Internal)
+
+The following internal constants can be modified in `server.py` if needed:
+
+| Constant | Default | Description |
+|----------|---------|-------------|
+| `KEY_INJECT_DELAY` | 0.012 | Delay between keystrokes (seconds) |
+| `WS_PING_INTERVAL` | 30 | WebSocket ping interval (seconds) |
+| `WS_PING_TIMEOUT` | 60 | WebSocket ping timeout (seconds) |
 
 ---
 
@@ -189,7 +207,7 @@ pip install -r requirements.txt
 python -m unittest test_server.py
 ```
 
-### 7. Run the server
+### 6. Run the server
 
 #### Basic Usage (HTTP, PIN enabled)
 ```bash
@@ -216,18 +234,18 @@ python server.py --mouse-speed 2.5
 python server.py --https --ws-port 9443 --http-port 9444 --mouse-speed 1.5
 ```
 
-### 8. Open on your phone
+### 7. Open on your phone
 
 The terminal will show:
 
 ```
 ╔══════════════════════════════════════════════╗
 ║         📱  PhoneKey  v3.1.0  💻            ║
-╠══════════════════════════════════════════════════╣
+╠══════════════════════════════════════════════╣
 ║  OS      : Windows                              ║
 ║  Mode    : HTTPS/WSS 🔒                         ║
 ║  PIN: 4827                                      ║
-╠══════════════════════════════════════════════════╣
+╠══════════════════════════════════════════════╣
 ║  Open on your phone:                             ║
 ║  👉  https://192.168.0.104:8080                 ║
 ╚══════════════════════════════════════════════════╝

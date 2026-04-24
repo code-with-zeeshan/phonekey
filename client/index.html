@@ -6,7 +6,11 @@
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <title>PhoneKey</title>
-  <link rel="icon" href="/phonekey.ico"/>
+  <!-- Multi-size favicon with SVG fallback -->
+  <link rel="icon" href="/phonekey.ico" sizes="any"/>
+  <link rel="icon" type="image/svg+xml" href="/phonekey.svg"/>
+  <link rel="apple-touch-icon" href="/phonekey.ico"/>
+  <meta name="theme-color" content="#0a0c14"/>
   <style>
     :root {
       --bg:        #0f1117;
