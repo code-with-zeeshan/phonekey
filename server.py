@@ -34,11 +34,13 @@ import socket
 import ssl
 import sys
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from typing import Optional
 
 # ─────────────────────────────────────────────
 #  Third-Party
@@ -46,14 +48,30 @@ from pathlib import Path
 import websockets
 
 # ─────────────────────────────────────────────
-#  Logging
+#  Tunnel Manager
 # ─────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
-logger = logging.getLogger("phonekey")
+try:
+    from tunnel_manager import TunnelManager
+    TUNNEL_AVAILABLE = True
+except ImportError:
+    TUNNEL_AVAILABLE = False
+
+# ─────────────────────────────────────────────
+#  Centralized Logging
+# ─────────────────────────────────────────────
+from logging_config import setup_logging, get_logger
+from logging_context import LogContext, log_context, trace_span
+from logging_utils import TimedLog, timed_log, ExceptionLogger, StructuredLogger
+
+# Setup centralized logging based on environment
+_ENV = os.environ.get("PHONEKEY_ENV", "development")
+setup_logging(environment=_ENV)
+
+# Get logger instances
+logger = get_logger("phonekey")
+http_logger = get_logger("phonekey.http")
+ws_logger = get_logger("phonekey.websocket")
+input_logger = get_logger("phonekey.input")
 
 # ─────────────────────────────────────────────
 #  Path Resolution (normal script + PyInstaller)
@@ -101,6 +119,10 @@ Examples:
     parser.add_argument(
         "--mouse-speed", type=float, default=1.0, metavar="MULTIPLIER",
         help="Mouse speed multiplier (default 1.0)",
+    )
+    parser.add_argument(
+        "--tunnel", action="store_true", default=False,
+        help="Enable Cloudflare Quick Tunnel for secure public URL (requires cloudflared binary)",
     )
     return parser.parse_args()
 
@@ -650,9 +672,10 @@ def build_ssl_context(local_ip: str) -> ssl.SSLContext:
 # ─────────────────────────────────────────────
 #  HTTP Server
 # ─────────────────────────────────────────────
-
 _WS_PORT:    int = DEFAULT_WS_PORT
 _USE_HTTPS:  bool = False
+_TUNNEL_URL: Optional[str] = None
+
 
 def _build_welcome_page(main_url: str, ws_port: int) -> str:
     """
@@ -976,7 +999,7 @@ def _build_welcome_page(main_url: str, ws_port: int) -> str:
     
     const browser = detectBrowser();
     document.getElementById('browser-name').textContent = browser.name;
-    document.querySelector('.browser-icon').className = `browser-icon ${browser.icon}`;
+    document.querySelector('.browser-icon').className = 'browser-icon ' + browser.icon;
     
     // Browser choice URLs
     const browserUrls = {{
@@ -1074,8 +1097,11 @@ class PhoneKeyHTTPHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         # ── Root path → welcome page ────────────────────────────────────────
         if self.path == "/":
-            proto = "https" if _USE_HTTPS else "http"
-            main_url = f"{proto}://{self.headers.get('Host', 'localhost')}"
+            proto = "https" if (_USE_HTTPS or _TUNNEL_URL) else "http"
+            if _TUNNEL_URL:
+                main_url = _TUNNEL_URL
+            else:
+                main_url = f"{proto}://{self.headers.get('Host', 'localhost')}"
             page = _build_welcome_page(main_url, _WS_PORT).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1203,9 +1229,9 @@ def print_qr_code(url: str) -> None:
 #  Startup Banner
 # ─────────────────────────────────────────────
 
-def print_banner(local_ip: str, ssl_ctx: ssl.SSLContext | None) -> None:
-    proto      = "https" if ssl_ctx else "http"
-    main_url   = f"{proto}://{local_ip}:{ARGS.http_port}"
+def print_banner(local_ip: str, ssl_ctx: ssl.SSLContext | None, tunnel_url: Optional[str] = None) -> None:
+    proto      = "https" if (ssl_ctx or tunnel_url) else "http"
+    main_url   = tunnel_url or f"{proto}://{local_ip}:{ARGS.http_port}"
     os_label   = {"win32": "Windows", "darwin": "macOS", "linux": "Linux"}.get(sys.platform, sys.platform)
     pin_line   = f"PIN: {SESSION_PIN}" if SESSION_PIN else "PIN: Disabled (--no-pin)"
 
@@ -1214,17 +1240,31 @@ def print_banner(local_ip: str, ssl_ctx: ssl.SSLContext | None) -> None:
     print(f"║         📱  PhoneKey  v{__version__}  💻            ║")
     print("╠══════════════════════════════════════════════════╣")
     print(f"║  OS   : {os_label:<41}║")
-    print(f"║  Mode : {('HTTPS/WSS 🔒' if ssl_ctx else 'HTTP/WS  🔓'):<41}║")
+    
+    if tunnel_url:
+        print(f"║  Mode : {'HTTPS (Cloudflare Tunnel) 🌐':<41}║")
+    else:
+        print(f"║  Mode : {('HTTPS/WSS 🔒' if ssl_ctx else 'HTTP/WS  🔓'):<41}║")
+    
     print(f"║  {pin_line:<48}║")
     print("╠══════════════════════════════════════════════════╣")
     print(f"║  URL : {main_url:<39}║")
     print("║                                                  ║")
     print("║  Scan QR code with phone camera                 ║")
-    print("║  Phone & laptop must be on the same WiFi        ║")
+    
+    if tunnel_url:
+        print("║  Phone & laptop can be on different networks!   ║")
+    else:
+        print("║  Phone & laptop must be on the same WiFi        ║")
+    
     print("║  Press Ctrl+C to stop                           ║")
     print("╚══════════════════════════════════════════════════╝")
 
-    if ssl_ctx:
+    if tunnel_url:
+        print()
+        print("  🌐  Secure public URL via Cloudflare Quick Tunnel")
+        print("     No certificate warnings!")
+    elif ssl_ctx:
         print()
         print("  ⚠️  HTTPS: Phone will show a certificate warning.")
         print("     Android: Advanced → Proceed to site")
@@ -1277,7 +1317,7 @@ def _setup_signals(stop_event: asyncio.Event, loop: asyncio.AbstractEventLoop) -
 # ─────────────────────────────────────────────
 
 async def main() -> None:
-    global _LAUNCH_URL, _WS_PORT, _USE_HTTPS
+    global _LAUNCH_URL, _WS_PORT, _USE_HTTPS, _TUNNEL_URL
 
     local_ip    = get_local_ip()
     ssl_ctx     = build_ssl_context(local_ip) if ARGS.https else None
@@ -1288,14 +1328,50 @@ async def main() -> None:
     _USE_HTTPS  = ARGS.https
     _LAUNCH_URL = f"{proto}://{local_ip}:{ARGS.http_port}"
 
-    print_banner(local_ip, ssl_ctx)
+    # ── Cloudflare Quick Tunnel ────────────────────────────────────────────
+    tunnel_manager: Optional[TunnelManager] = None
+    tunnel_url: Optional[str] = None
+    _TUNNEL_URL = None
+    
+    if ARGS.tunnel:
+        if not TUNNEL_AVAILABLE:
+            logger.error("❌  Cloudflare tunnel requested but tunnel_manager not available")
+            logger.error("    Install with: pip install cloudflared or download binary")
+            sys.exit(1)
+        
+        # Start HTTP server first (tunnel needs it)
+        http_thread = threading.Thread(
+            target=start_http_server,
+            args=(ssl_ctx,),
+            daemon=True,
+        )
+        http_thread.start()
+        
+        # Wait a moment for server to be ready
+        time.sleep(2)
+        
+        # Start tunnel
+        tunnel_manager = TunnelManager(ARGS.http_port)
+        tunnel_url = tunnel_manager.start()
+        
+        if tunnel_url:
+            _LAUNCH_URL = tunnel_url
+            _TUNNEL_URL = tunnel_url
+            proto = "https"
+            ws_proto = "wss"
+            logger.info("🌐 Using tunnel URL: %s", tunnel_url)
+        else:
+            logger.warning("⚠️  Tunnel failed, falling back to local URL")
+            logger.warning("    Start server without --tunnel to use local connection")
+    else:
+        # ── HTTP(S) server — daemon thread ─────────────────────────────────
+        threading.Thread(
+            target=start_http_server,
+            args=(ssl_ctx,),
+            daemon=True,
+        ).start()
 
-    # ── HTTP(S) server — daemon thread ────────────────────────────────────
-    threading.Thread(
-        target=start_http_server,
-        args=(ssl_ctx,),
-        daemon=True,
-    ).start()
+    print_banner(local_ip, ssl_ctx, tunnel_url)
 
     logger.info("🔌 WebSocket (%s) → port %d", ws_proto.upper(), ARGS.ws_port)
 

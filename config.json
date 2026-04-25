@@ -1,0 +1,307 @@
+{
+  "title": "PhoneKey Configuration",
+  "description": "Centralized configuration for PhoneKey v3.1.0 - Phone-as-Keyboard & Mouse Server",
+  "version": "3.1.0",
+
+  "application": {
+    "version": {
+      "type": "string",
+      "description": "PhoneKey application version",
+      "default": "3.1.0",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "name": {
+      "type": "string",
+      "description": "Application display name",
+      "default": "PhoneKey"
+    }
+  },
+
+
+  "network": {
+    "websocket": {
+      "port": {
+        "type": "integer",
+        "description": "WebSocket server port for real-time communication",
+        "default": 8765,
+        "minimum": 1024,
+        "maximum": 65535
+      },
+      "ping_interval": {
+        "type": "integer",
+        "description": "WebSocket ping interval in seconds to keep connection alive",
+        "default": 30,
+        "minimum": 5,
+        "maximum": 300,
+        "unit": "seconds"
+      },
+      "ping_timeout": {
+        "type": "integer",
+        "description": "WebSocket ping timeout in seconds before considering connection dead",
+        "default": 60,
+        "minimum": 10,
+        "maximum": 600,
+        "unit": "seconds"
+      }
+    },
+    "http": {
+      "port": {
+        "type": "integer",
+        "description": "HTTP server port for serving web interface",
+        "default": 8080,
+        "minimum": 1024,
+        "maximum": 65535
+      },
+      "host": {
+        "type": "string",
+        "description": "HTTP server bind address (0.0.0.0 = all interfaces)",
+        "default": "0.0.0.0"
+      }
+    },
+    "connection_timeout": {
+      "type": "integer",
+      "description": "WebSocket connection timeout in seconds",
+      "default": 30,
+      "minimum": 5,
+      "maximum": 120,
+      "unit": "seconds"
+    }
+  },
+
+
+  "input": {
+    "keyboard": {
+      "key_inject_delay": {
+        "type": "number",
+        "description": "Delay between keystrokes in seconds to prevent key drops",
+        "default": 0.012,
+        "minimum": 0.001,
+        "maximum": 1.0,
+        "unit": "seconds"
+      }
+    },
+    "mouse": {
+      "speed_multiplier": {
+        "type": "number",
+        "description": "Mouse movement speed multiplier (0.1 = slow, 5.0 = fast)",
+        "default": 1.0,
+        "minimum": 0.1,
+        "maximum": 5.0
+      }
+    }
+  },
+
+
+  "security": {
+    "authentication": {
+      "pin": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable 4-digit PIN authentication for connections",
+          "default": true
+        },
+        "length": {
+          "type": "integer",
+          "description": "PIN code length in digits",
+          "default": 4,
+          "minimum": 4,
+          "maximum": 8
+        }
+      },
+      "tls": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable HTTPS/WSS with self-signed certificates",
+          "default": false
+        },
+        "certificate_validity_days": {
+          "type": "integer",
+          "description": "Self-signed certificate validity period in days",
+          "default": 365,
+          "minimum": 1,
+          "maximum": 3650,
+          "unit": "days"
+        }
+      }
+    },
+    "tunnel": {
+      "enabled": {
+        "type": "boolean",
+        "description": "Enable Cloudflare Quick Tunnel for secure public URLs",
+        "default": false
+      },
+      "provider": {
+        "type": "string",
+        "description": "Tunnel service provider",
+        "default": "cloudflare",
+        "enum": ["cloudflare"]
+      },
+      "api_url": {
+        "type": "string",
+        "description": "GitHub API URL for checking latest cloudflared release",
+        "default": "https://api.github.com/repos/cloudflare/cloudflared/releases/latest"
+      },
+      "download_base_url": {
+        "type": "string",
+        "description": "Base URL for downloading cloudflared binary",
+        "default": "https://github.com/cloudflare/cloudflared/releases/latest/download"
+      },
+      "binary_name": {
+        "type": "string",
+        "description": "Cloudflared binary name (auto-detected by platform)",
+        "default": "cloudflared"
+      }
+    }
+  },
+
+
+  "filesystem": {
+    "directories": {
+      "client": {
+        "type": "string",
+        "description": "Path to client web interface directory",
+        "default": "client",
+        "relative_to": "base_directory"
+      },
+      "bin": {
+        "type": "string",
+        "description": "Directory for downloaded binaries (e.g., cloudflared)",
+        "default": "bin",
+        "relative_to": "base_directory"
+      },
+      "certificates": {
+        "type": "string",
+        "description": "Directory for SSL/TLS certificates",
+        "default": ".",
+        "relative_to": "base_directory"
+      }
+    },
+    "files": {
+      "certificate": {
+        "type": "string",
+        "description": "SSL certificate file name",
+        "default": "phonekey-cert.pem"
+      },
+      "private_key": {
+        "type": "string",
+        "description": "SSL private key file name",
+        "default": "phonekey-key.pem"
+      }
+    }
+  },
+
+
+  "platform": {
+    "windows": {
+      "ctrl_events": {
+        "ctrl_c": {
+          "type": "integer",
+          "description": "Windows CTRL+C event code",
+          "default": 0
+        },
+        "ctrl_close": {
+          "type": "integer",
+          "description": "Windows window close event code",
+          "default": 2
+        }
+      },
+      "ignored_errors": {
+        "type": "array",
+        "description": "Windows socket errors to ignore (graceful disconnects)",
+        "items": {
+          "type": "integer"
+        },
+        "default": [10053, 10054, 10058]
+      }
+    },
+    "architectures": {
+      "x86_64": {
+        "type": "string",
+        "description": "Cloudflared binary architecture name for x86_64",
+        "default": "amd64"
+      },
+      "arm64": {
+        "type": "string",
+        "description": "Cloudflared binary architecture name for ARM64",
+        "default": "arm64"
+      },
+      "arm": {
+        "type": "string",
+        "description": "Cloudflared binary architecture name for ARM",
+        "default": "arm"
+      }
+    }
+  },
+
+
+  "cloud": {
+    "github": {
+      "api_url": {
+        "type": "string",
+        "description": "GitHub API endpoint for cloudflared releases",
+        "default": "https://api.github.com/repos/cloudflare/cloudflared/releases/latest"
+      },
+      "download_timeout": {
+        "type": "integer",
+        "description": "Timeout for downloading cloudflared binary in seconds",
+        "default": 120,
+        "minimum": 30,
+        "maximum": 300,
+        "unit": "seconds"
+      },
+      "api_timeout": {
+        "type": "integer",
+        "description": "Timeout for GitHub API requests in seconds",
+        "default": 15,
+        "minimum": 5,
+        "maximum": 60,
+        "unit": "seconds"
+      }
+    }
+  },
+
+
+  "environments": {
+    "development": {
+      "description": "Development environment settings",
+      "network.websocket.port": 8765,
+      "network.http.port": 8080,
+      "security.authentication.pin.enabled": false,
+      "security.tunnel.enabled": false
+    },
+    "production": {
+      "description": "Production environment settings",
+      "network.websocket.port": 8765,
+      "network.http.port": 8080,
+      "security.authentication.pin.enabled": true,
+      "security.tunnel.enabled": true
+    },
+    "testing": {
+      "description": "Testing environment settings",
+      "network.websocket.port": 9999,
+      "network.http.port": 9998,
+      "security.authentication.pin.enabled": false,
+      "security.tunnel.enabled": false,
+      "input.keyboard.key_inject_delay": 0.001
+    }
+  },
+
+
+  "validation": {
+    "port_range": {
+      "min": 1024,
+      "max": 65535,
+      "description": "Valid port range for network services"
+    },
+    "speed_multiplier_range": {
+      "min": 0.1,
+      "max": 5.0,
+      "description": "Valid mouse speed multiplier range"
+    },
+    "key_delay_range": {
+      "min": 0.001,
+      "max": 1.0,
+      "description": "Valid keystroke delay range in seconds"
+    }
+  }
+}

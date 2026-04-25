@@ -1,6 +1,6 @@
 # 📱→💻 PhoneKey v3.1.0
 
-> Advanced phone-as-keyboard with mouse control, clipboard sync, secure connections, direct QR connection, and tab-ID deduplication — lightweight, real-time, zero-install on phone.
+> Advanced phone-as-keyboard with mouse control, clipboard sync, secure connections, Cloudflare tunnel, direct QR connection, and tab-ID deduplication — lightweight, real-time, zero-install on phone.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://python.org)
@@ -16,8 +16,9 @@
 | Need mouse control | Touch trackpad with gestures (move, click, scroll) |
 | Clipboard between devices | Phone-to-laptop clipboard sync |
 | Multiple device management | Device naming & real-time connection tracking |
-| Security concerns | 4-digit PIN authentication + HTTPS/WSS |
+| Security concerns | 4-digit PIN authentication + HTTPS/WSS + Cloudflare tunnel |
 | Hard to share URL | QR code terminal display for instant scanning |
+| Certificate warnings | Cloudflare tunnel (no warnings!) |
 | Other tools show duplicates | Sentinel pattern + tab deduplication |
 | Other tools eat laptop RAM | ~20 MB Python process with all features |
 | Other tools require app install | Pure browser — no downloads needed |
@@ -73,6 +74,7 @@
 ### 🔐 Security & Authentication
 - **4-Digit PIN**: Secure connection with optional PIN authentication
 - **HTTPS/WSS**: Auto-generated self-signed certificates for encrypted connections
+- **Cloudflare Quick Tunnel**: Secure public URLs without certificate warnings
 - **Connection Deduplication**: Prevents duplicate connections from same browser tab
 - **Enhanced SSL Certificate Reuse**: Improved certificate validation with IP address matching for better compatibility
 
@@ -96,11 +98,12 @@
 - **UI Refinements**: Updated favicon, logo styling with icon, theme toggle size adjustment, footer text enhancement
 
 ### 🛠️ Developer Features
-- **CLI Arguments**: Custom ports, HTTPS mode, PIN disable, mouse speed
+- **CLI Arguments**: Custom ports, HTTPS mode, tunnel mode, PIN disable, mouse speed
 - **Type Hints**: Full Python type annotations for maintainability
 - **Unit Tests**: Test coverage for core functionality
 - **Connection Metrics**: Active connection counting and logging
 - **Tab-ID Deduplication**: Prevent duplicate connections from same browser tab using tab_id tracking
+- **Cloudflare Tunnel**: Secure public URLs via cloudflared integration
 
 ### 🐛 Fixes & Improvements
 - **PyInstaller Exclusions**: Removed problematic imports (`"email"`, `"urllib"`, `"html"`) causing build failures
@@ -127,6 +130,7 @@ PhoneKey supports configuration via command-line arguments:
 | `--ws-port` | 8765 | WebSocket server port |
 | `--http-port` | 8080 | HTTP server port for client UI |
 | `--https` | False | Enable HTTPS/WSS (auto-generates self-signed cert) |
+| `--tunnel` | False | Enable Cloudflare Quick Tunnel for secure public URL |
 | `--no-pin` | False | Disable 4-digit PIN authentication |
 | `--mouse-speed` | 1.0 | Mouse speed multiplier (0.1-5.0) |
 
@@ -134,6 +138,25 @@ Example:
 ```bash
 python server.py --ws-port 9000 --http-port 9001 --https --mouse-speed 2.0
 ```
+
+### Cloudflare Quick Tunnel
+
+For a secure public URL without certificate warnings:
+
+1. Run with `--tunnel` flag:
+
+```bash
+python server.py --tunnel
+```
+
+2. The system will automatically download `cloudflared` if not found (in `bin/` directory)
+3. Or manually download from [Cloudflare Quick Tunnels](https://github.com/cloudflare/cloudflared/releases) and place in project root, `bin/`, or system PATH
+
+The tunnel creates a temporary `https://*.trycloudflare.com` URL that:
+- Works from any network (no same-WiFi required)
+- Has no certificate warnings (valid HTTPS from Cloudflare)
+- Is accessible publicly (use with PIN for security)
+- Auto-downloads the cloudflared binary on first use
 
 ### Constants (Internal)
 
@@ -230,8 +253,11 @@ python server.py --no-pin
 # Adjust mouse speed (0.1-5.0)
 python server.py --mouse-speed 2.5
 
-# Full secure setup
+# Full secure setup with HTTPS
 python server.py --https --ws-port 9443 --http-port 9444 --mouse-speed 1.5
+
+# Secure public URL with Cloudflare tunnel (no certificate warnings!)
+python server.py --tunnel --no-pin
 ```
 
 ### 7. Open on your phone

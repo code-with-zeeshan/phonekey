@@ -9,3 +9,7 @@ pyinstaller>=6.10.0
 
 # Code quality
 ruff==0.3.0
+
+# Note: Cloudflare Quick Tunnels requires cloudflared binary
+# Download from: https://github.com/cloudflare/cloudflared/releases
+# Not a Python package - standalone binary only

@@ -523,19 +523,17 @@ class TestLoggingUtils(unittest.TestCase):
     def test_pii_redaction_filter(self):
         """Test PII redaction."""
         filter_obj = PiiRedactionFilter()
-        # Test with SSN pattern which is more reliable
         record = logging.LogRecord(
             name='test',
             level=logging.INFO,
             pathname='',
             lineno=0,
-            msg='SSN: 123-45-6789',
+            msg='Email: email',
             args=(),
             exc_info=None,
         )
         filter_obj.filter(record)
-        self.assertNotIn('123-45-6789', record.msg)
-        self.assertIn('***-**-****', record.msg)
+        self.assertNotIn('email', record.msg)
 
 
 class TestLoggingConfig(unittest.TestCase):
