@@ -8,7 +8,7 @@ from pathlib import Path
 block_cipher = None
 
 a = Analysis(
-    ["server.py"],                           # Entry point
+    ["system.py"],                           # Entry point
     pathex=[],
     binaries=[],
     datas=[
@@ -68,5 +68,5 @@ exe = EXE(
     entitlements_file=None,
     # Windows: show a nice name in Task Manager
     version_file=None,
-    icon="phonekey.ico",                    # Icon for executable
+    icon="client/phonekey.ico",                    # Icon for executable
 )

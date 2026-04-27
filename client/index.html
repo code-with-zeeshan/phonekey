@@ -688,604 +688,654 @@
 </div><!-- /#main-app -->
 
 <script>
-"use strict";
-
-// ── Config ────────────────────────────────────────────────────────────────────
-const WS_PORT           = 8765;
-const WS_PROTO          = location.protocol === "https:" ? "wss" : "ws";
-const WS_URL            = `${WS_PROTO}://${location.hostname}:${WS_PORT}`;
-const RECONNECT_BASE_MS = 1000;
-const RECONNECT_MAX_MS  = 16000;
-const RECONNECT_FACTOR  = 2;
-const SENTINEL          = "\u200B";
-
-// ── DOM ───────────────────────────────────────────────────────────────────────
-const sentinelEl    = document.getElementById("sentinel-input");
-const tapBtn        = document.getElementById("tap-to-type");
-const liveDisplay   = document.getElementById("live-display");
-const placeholder   = document.getElementById("preview-placeholder");
-const cursorInfoEl  = document.getElementById("cursor-info");
-const syncIndicator = document.getElementById("sync-indicator");
-const statusBadge   = document.getElementById("status-badge");
-const statusText    = document.getElementById("status-text");
-const pinOverlay    = document.getElementById("pin-overlay");
-const mainApp       = document.getElementById("main-app");
-
-// ── State ─────────────────────────────────────────────────────────────────────
-let socket          = null;
-let reconnectDelay  = RECONNECT_BASE_MS;
-let reconnectTimer  = null;
-let myDeviceId      = null;
-let myDeviceName    = localStorage.getItem("pk_name") || "";
-let myTabId         = sessionStorage.getItem("pk_tab_id") || crypto.randomUUID();
-let pinBuffer       = "";
-let mouseSpeedMult  = 1.0;
-let previewText     = "";
-let cursorPos       = 0;
-let laptopCursorPos = 0;
-let capsLock        = false;
-let _pendingPaste   = false;
-
-// Persist tab ID for this browser session (sessionStorage = tab session)
-if (!sessionStorage.getItem("pk_tab_id")) {
+  "use strict";
+  
+  // ── Config ────────────────────────────────────────────────────────────────────
+  const WS_PORT           = 8765;
+  const WS_PROTO          = location.protocol === "https:" ? "wss" : "ws";
+  const WS_URL            = `${WS_PROTO}://${location.hostname}:${WS_PORT}`;
+  const RECONNECT_BASE_MS = 1000;
+  const RECONNECT_MAX_MS  = 16000;
+  const RECONNECT_FACTOR  = 2;
+  const SENTINEL          = "\u200B";
+  
+  // ── DOM ───────────────────────────────────────────────────────────────────────
+  const sentinelEl    = document.getElementById("sentinel-input");
+  const tapBtn        = document.getElementById("tap-to-type");
+  const liveDisplay   = document.getElementById("live-display");
+  const placeholder   = document.getElementById("preview-placeholder");
+  const cursorInfoEl  = document.getElementById("cursor-info");
+  const syncIndicator = document.getElementById("sync-indicator");
+  const statusBadge   = document.getElementById("status-badge");
+  const statusText    = document.getElementById("status-text");
+  const pinOverlay    = document.getElementById("pin-overlay");
+  const mainApp       = document.getElementById("main-app");
+  
+  // ── State ─────────────────────────────────────────────────────────────────────
+  let socket          = null;
+  let reconnectDelay  = RECONNECT_BASE_MS;
+  let reconnectTimer  = null;
+  let myDeviceId      = null;
+  let myDeviceName    = localStorage.getItem("pk_name") || "";
+  let myTabId         = sessionStorage.getItem("pk_tab_id") || crypto.randomUUID();
+  let pinBuffer       = "";
+  let mouseSpeedMult  = 1.0;
+  let previewText     = "";
+  let cursorPos       = 0;
+  let laptopCursorPos = 0;
+  let capsLock        = false;
+  let _pendingPaste   = false;
+  
+  // ── Server config (fetched once from /api/config) ─────────────────────────────
+  // Replaces the brittle server-side SESSION_PIN string injection.
+  let SESSION_PIN_REQUIRED = true;   // safe default; overwritten by boot()
+  
+  if (!sessionStorage.getItem("pk_tab_id")) {
     sessionStorage.setItem("pk_tab_id", myTabId);
-}
-
-const modifiers = {
-  Shift:false, Control:false, Alt:false,
-  ShiftRight:false, ControlRight:false, AltRight:false,
-};
-const MOD_KEY = {
-  Shift:"Shift", Control:"Control", Alt:"Alt",
-  ShiftRight:"ShiftRight", ControlRight:"ControlRight", AltRight:"AltRight",
-};
-
-// ── Theme ─────────────────────────────────────────────────────────────────────
-(function initTheme() {
-  const t = localStorage.getItem("pk_theme") || "dark";
-  document.documentElement.setAttribute("data-theme", t);
-  document.getElementById("theme-toggle").textContent = t === "dark" ? "🌙" : "☀️";
-})();
-
-// ── Page Visibility: Auto-reconnect when tab becomes visible ─────────────────
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") {
-    const wasConnected = socket && socket.readyState === WebSocket.OPEN;
-    if (!wasConnected && socket && socket.readyState === WebSocket.CLOSED) {
-      // User returned to tab and socket is closed — reconnect immediately
+  }
+  
+  const modifiers = {
+    Shift:false, Control:false, Alt:false,
+    ShiftRight:false, ControlRight:false, AltRight:false,
+  };
+  const MOD_KEY = {
+    Shift:"Shift", Control:"Control", Alt:"Alt",
+    ShiftRight:"ShiftRight", ControlRight:"ControlRight", AltRight:"AltRight",
+  };
+  
+  // ── Theme ─────────────────────────────────────────────────────────────────────
+  (function initTheme() {
+    const t = localStorage.getItem("pk_theme") || "dark";
+    document.documentElement.setAttribute("data-theme", t);
+    document.getElementById("theme-toggle").textContent = t === "dark" ? "🌙" : "☀️";
+  })();
+  
+  function toggleTheme() {
+    const cur = document.documentElement.getAttribute("data-theme") || "dark";
+    const nxt = cur === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", nxt);
+    document.getElementById("theme-toggle").textContent = nxt === "dark" ? "🌙" : "☀️";
+    localStorage.setItem("pk_theme", nxt);
+  }
+  
+  // ── Tab Navigation ────────────────────────────────────────────────────────────
+  function switchTab(name) {
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.getElementById(`panel-${name}`).classList.add("active");
+    document.getElementById(`tab-${name}`).classList.add("active");
+    if (name === "keyboard") setTimeout(activateSentinel, 100);
+  }
+  
+  // ── WebSocket ─────────────────────────────────────────────────────────────────
+  function connect() {
+    setStatus("connecting", "Connecting…");
+    socket = new WebSocket(WS_URL);
+    socket.addEventListener("open",    onWsOpen);
+    socket.addEventListener("message", onWsMessage);
+    socket.addEventListener("close",   onWsClose);
+    socket.addEventListener("error",   () => socket.close());
+  }
+  
+  function onWsOpen() {
+    reconnectDelay = RECONNECT_BASE_MS;
+    setStatus("connecting", "Authenticating…");
+    clearTimeout(reconnectTimer);
+  
+    const storedPin = sessionStorage.getItem("pk_pin");
+    if (storedPin) {
+      // Reconnect path: re-authenticate with the cached PIN
+      sendPayload({ action: "pin_auth", pin: storedPin, tabId: myTabId });
+    } else if (!SESSION_PIN_REQUIRED) {
+      // No-PIN mode: skip the overlay and handshake immediately
+      sendPayload({ action: "hello", tabId: myTabId });
+    }
+    // PIN required and no cached PIN: wait for user to enter via numpad
+  }
+  
+  function onWsMessage(e) {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    switch (msg.type) {
+      case "auth_ok":
+        myDeviceId = msg.device_id;
+        setStatus("connected", "Connected ✓");
+        if (pinBuffer.length === 4) {
+          sessionStorage.setItem("pk_pin", pinBuffer);
+        }
+        pinBuffer = "";
+        showMainApp();
+        if (myDeviceName) {
+          sendPayload({ action: "device_name", name: myDeviceName, tabId: myTabId });
+          document.getElementById("my-name-input").value = myDeviceName;
+        }
+        break;
+      case "auth_fail":    handleAuthFail(msg.reason); break;
+      case "device_list":  renderDeviceList(msg.devices); break;
+      case "clipboard_ack": handleClipboardAck(msg.error); break;
+    }
+  }
+  
+  function onWsClose() {
+    setStatus("disconnected", "Reconnecting…");
+    scheduleReconnect();
+  }
+  
+  function scheduleReconnect() {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => {
+      reconnectDelay = Math.min(reconnectDelay * RECONNECT_FACTOR, RECONNECT_MAX_MS);
+      connect();
+    }, reconnectDelay);
+  }
+  
+  function setStatus(state, label) {
+    statusBadge.className = state;
+    statusText.textContent = label;
+  }
+  
+  function sendPayload(p) {
+    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(p));
+  }
+  
+  // ── PIN ───────────────────────────────────────────────────────────────────────
+  function showMainApp() {
+    pinOverlay.classList.add("hidden");
+    mainApp.style.display = "block";
+    setTimeout(activateSentinel, 200);
+  }
+  
+  function pinKey(d) {
+    if (pinBuffer.length >= 4) return;
+    pinBuffer += d;
+    updatePinDots();
+    if (pinBuffer.length === 4) setTimeout(submitPin, 80);
+  }
+  
+  function pinBackspace() {
+    pinBuffer = pinBuffer.slice(0, -1);
+    updatePinDots();
+  }
+  
+  function updatePinDots() {
+    for (let i = 0; i < 4; i++) {
+      const dot = document.getElementById(`pd${i}`);
+      dot.classList.toggle("filled", i < pinBuffer.length);
+      dot.classList.remove("error");
+    }
+    document.getElementById("pin-error").textContent = "";
+  }
+  
+  function submitPin() {
+    sendPayload({ action: "pin_auth", pin: pinBuffer, tabId: myTabId });
+  }
+  
+  function handleAuthFail(reason) {
+    for (let i = 0; i < 4; i++) document.getElementById(`pd${i}`).classList.add("error");
+    document.getElementById("pin-error").textContent =
+      reason === "wrong_pin" ? "❌ Incorrect PIN — try again" : "Connection error";
+    sessionStorage.removeItem("pk_pin");   // clear stale cached PIN on failure
+    pinBuffer = "";
+    setTimeout(updatePinDots, 600);
+  }
+  
+  // ── Modifiers ─────────────────────────────────────────────────────────────────
+  function pressActiveModifiers() {
+    Object.entries(modifiers).forEach(([m, h]) => { if (h) sendPayload({ action:"keydown", key:MOD_KEY[m] }); });
+  }
+  
+  function releaseActiveModifiers() {
+    Object.entries(modifiers).forEach(([m, h]) => {
+      if (h) {
+        sendPayload({ action:"keyup", key:MOD_KEY[m] });
+        modifiers[m] = false;
+        document.getElementById(`mod-${m}`)?.classList.remove("active");
+      }
+    });
+  }
+  
+  function toggleModifier(mod) {
+    modifiers[mod] = !modifiers[mod];
+    document.getElementById(`mod-${mod}`)?.classList.toggle("active", modifiers[mod]);
+    sendPayload({ action: modifiers[mod] ? "keydown" : "keyup", key: MOD_KEY[mod] });
+    activateSentinel();
+  }
+  
+  // ── Key Send ──────────────────────────────────────────────────────────────────
+  function sendChar(char) {
+    pressActiveModifiers();
+    sendPayload({ action: "keypress", key: char });
+    releaseActiveModifiers();
+    vcInsert(applyModsToChar(char));
+    laptopCursorPos = cursorPos;
+  }
+  
+  function sendSpecial(key) {
+    pressActiveModifiers();
+    sendPayload({ action: "keypress", key });
+    releaseActiveModifiers();
+    if (key === "CapsLock") capsLock = !capsLock;
+    vcApplySpecial(key);
+    laptopCursorPos = cursorPos;
+  }
+  
+  function sendCombo(mod, key) {
+    sendPayload({ action: "keydown",  key: mod });
+    sendPayload({ action: "keypress", key });
+    sendPayload({ action: "keyup",    key: mod });
+  }
+  
+  function applyModsToChar(ch) {
+    const sh = modifiers.Shift || modifiers.ShiftRight;
+    if (ch.length === 1) {
+      const u = ch.toUpperCase(), l = ch.toLowerCase();
+      if (ch !== u || ch !== l) return (capsLock ? !sh : sh) ? u : l;
+    }
+    return ch;
+  }
+  
+  // ── Virtual Cursor ────────────────────────────────────────────────────────────
+  function vcInsert(chars) {
+    previewText = previewText.slice(0, cursorPos) + chars + previewText.slice(cursorPos);
+    cursorPos  += [...chars].length;
+    renderPreview();
+  }
+  
+  function vcApplySpecial(key) {
+    switch (key) {
+      case "Backspace":
+        if (cursorPos > 0) {
+          const a = [...previewText.slice(0, cursorPos)]; a.pop();
+          const b = a.join(""); previewText = b + previewText.slice(cursorPos); cursorPos = b.length;
+        } break;
+      case "Delete":
+        if (cursorPos < previewText.length) {
+          const a = [...previewText.slice(cursorPos)]; a.shift();
+          previewText = previewText.slice(0, cursorPos) + a.join("");
+        } break;
+      case "Enter": vcInsert("\n"); return;
+      case "Tab":   vcInsert("\t"); return;
+      case "ArrowLeft":
+        if (cursorPos > 0) cursorPos = [...previewText.slice(0, cursorPos)].slice(0,-1).join("").length;
+        break;
+      case "ArrowRight":
+        if (cursorPos < previewText.length) cursorPos += ([...previewText.slice(cursorPos)][0]||"").length;
+        break;
+      case "ArrowUp": {
+        const ls = previewText.lastIndexOf("\n", cursorPos-1);
+        const col = cursorPos-(ls+1);
+        if (ls===-1){cursorPos=0;break;}
+        const pls = previewText.lastIndexOf("\n", ls-1)+1;
+        cursorPos = Math.min(pls+col, ls); break;
+      }
+      case "ArrowDown": {
+        const nl = previewText.indexOf("\n", cursorPos);
+        if (nl===-1){cursorPos=previewText.length;break;}
+        const ls2 = previewText.lastIndexOf("\n", cursorPos-1)+1;
+        const col2 = cursorPos-ls2;
+        const nls = nl+1, nle = previewText.indexOf("\n", nls);
+        const nll = (nle===-1?previewText.length:nle)-nls;
+        cursorPos = nls+Math.min(col2, nll); break;
+      }
+      case "Home": { const ls=previewText.lastIndexOf("\n", cursorPos-1); cursorPos=ls+1; break; }
+      case "End":  { const ne=previewText.indexOf("\n", cursorPos); cursorPos=ne===-1?previewText.length:ne; break; }
+      default: flashDisplay(); return;
+    }
+    renderPreview();
+  }
+  
+  // ── Cursor Sync ───────────────────────────────────────────────────────────────
+  function syncLaptopCursor(newPos) {
+    const delta = newPos - laptopCursorPos;
+    if (delta === 0) return;
+    const key = delta < 0 ? "ArrowLeft" : "ArrowRight";
+    const n   = Math.abs(delta);
+    for (let i = 0; i < n; i++) sendPayload({ action: "keypress", key });
+    laptopCursorPos = newPos;
+    syncIndicator.textContent = `↔ ${n} key${n>1?"s":""} sent`;
+    syncIndicator.classList.add("show");
+    setTimeout(() => syncIndicator.classList.remove("show"), 1200);
+  }
+  
+  // ── Preview Render ────────────────────────────────────────────────────────────
+  function renderPreview() {
+    liveDisplay.textContent = "";
+    liveDisplay.appendChild(document.createTextNode(previewText.slice(0, cursorPos)));
+    const caret = document.createElement("span");
+    caret.className = "v-caret";
+    caret.setAttribute("aria-hidden", "true");
+    liveDisplay.appendChild(caret);
+    liveDisplay.appendChild(document.createTextNode(previewText.slice(cursorPos)));
+    placeholder.style.opacity = previewText.length === 0 ? "1" : "0";
+    caret.scrollIntoView({ block:"nearest", inline:"nearest" });
+    updateCursorInfo();
+    flashDisplay();
+  }
+  
+  function updateCursorInfo() {
+    const lines = previewText.slice(0, cursorPos).split("\n");
+    cursorInfoEl.textContent = `col ${[...lines[lines.length-1]].length+1} | row ${lines.length}`;
+  }
+  
+  function flashDisplay() {
+    liveDisplay.classList.add("active-preview");
+    if (document.activeElement !== sentinelEl) {
+      setTimeout(() => liveDisplay.classList.remove("active-preview"), 150);
+    }
+  }
+  
+  // ── Tap-to-Reposition ─────────────────────────────────────────────────────────
+  liveDisplay.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    let offset = previewText.length;
+    try {
+      let node = null, off = 0;
+      if (document.caretRangeFromPoint) {
+        const r = document.caretRangeFromPoint(e.clientX, e.clientY);
+        if (r) { node = r.startContainer; off = r.startOffset; }
+      } else if (document.caretPositionFromPoint) {
+        const p = document.caretPositionFromPoint(e.clientX, e.clientY);
+        if (p) { node = p.offsetNode; off = p.offset; }
+      }
+      if (node) offset = domToText(node, off);
+    } catch(_) {}
+    const np = Math.max(0, Math.min(offset, previewText.length));
+    syncLaptopCursor(np);
+    cursorPos = np;
+    renderPreview();
+    if (document.activeElement === sentinelEl) {
+      sentinelEl.value = SENTINEL;
+      sentinelEl.setSelectionRange(SENTINEL.length, SENTINEL.length);
+    } else {
+      activateSentinel();
+    }
+  });
+  
+  function domToText(target, offInNode) {
+    let total = 0;
+    function walk(n) {
+      if (n === target) return true;
+      if (n.nodeType === Node.TEXT_NODE) { total += n.textContent.length; return false; }
+      if (n.classList?.contains("v-caret")) return false;
+      for (const c of n.childNodes) { if (walk(c)) return true; }
+      return false;
+    }
+    walk(liveDisplay);
+    return total + offInNode;
+  }
+  
+  // ── Sentinel ──────────────────────────────────────────────────────────────────
+  sentinelEl.addEventListener("input", () => {
+    const cur = sentinelEl.value;
+    if (cur === SENTINEL) return;
+    if (cur.length > SENTINEL.length) {
+      for (const ch of cur.slice(SENTINEL.length)) { if (ch !== SENTINEL) sendChar(ch); }
+    } else if (cur.length === 0) {
+      sendSpecial("Backspace");
+    }
+    sentinelEl.value = SENTINEL;
+  });
+  
+  sentinelEl.addEventListener("keydown", (e) => {
+    if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End"].includes(e.key)) {
+      e.preventDefault(); return;
+    }
+    if (e.key === "Backspace" && sentinelEl.value === SENTINEL) {
+      e.preventDefault(); sendSpecial("Backspace"); return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault(); sendSpecial("Enter"); sentinelEl.value = SENTINEL;
+    }
+  });
+  
+  sentinelEl.addEventListener("blur", () => {
+    tapBtn.classList.remove("active");
+    tapBtn.textContent = "👆 Tap here to start typing";
+    liveDisplay.classList.remove("active-preview");
+  });
+  
+  sentinelEl.addEventListener("focus", () => {
+    tapBtn.classList.add("active");
+    tapBtn.textContent = "⌨️ Keyboard active — start typing";
+    liveDisplay.classList.add("active-preview");
+    sentinelEl.value = SENTINEL;
+    sentinelEl.setSelectionRange(SENTINEL.length, SENTINEL.length);
+  });
+  
+  function activateSentinel() {
+    sentinelEl.focus();
+    sentinelEl.value = SENTINEL;
+    sentinelEl.setSelectionRange(SENTINEL.length, SENTINEL.length);
+  }
+  
+  function clearDisplay() {
+    previewText=""; cursorPos=0; laptopCursorPos=0;
+    liveDisplay.textContent=""; placeholder.style.opacity="1";
+    updateCursorInfo();
+  }
+  
+  // ── Mouse Trackpad ────────────────────────────────────────────────────────────
+  const trackpad = document.getElementById("trackpad-area");
+  let tpTouches  = {}, tpTapTimer = null;
+  
+  trackpad.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    trackpad.classList.add("active-touch");
+    Array.from(e.changedTouches).forEach(t => {
+      tpTouches[t.identifier] = { x:t.clientX, y:t.clientY, sx:t.clientX, sy:t.clientY };
+    });
+    if (Object.keys(tpTouches).length === 1) {
+      tpTapTimer = setTimeout(() => { tpTapTimer = null; }, 250);
+    }
+  }, { passive:false });
+  
+  trackpad.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    const tc = e.touches.length;
+    if (tc === 1) {
+      const t = e.touches[0], r = tpTouches[t.identifier];
+      if (!r) return;
+      const dx = (t.clientX - r.x) * mouseSpeedMult;
+      const dy = (t.clientY - r.y) * mouseSpeedMult;
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+        sendPayload({ action:"mouse_move", dx, dy });
+        tpTouches[t.identifier] = { ...r, x:t.clientX, y:t.clientY };
+        tpTapTimer = null;
+      }
+    } else if (tc === 2) {
+      const t0=e.touches[0], t1=e.touches[1];
+      const r0=tpTouches[t0.identifier], r1=tpTouches[t1.identifier];
+      if (!r0 || !r1) return;
+      const avgDy = ((t0.clientY-r0.y)+(t1.clientY-r1.y))/2;
+      const avgDx = ((t0.clientX-r0.x)+(t1.clientX-r1.x))/2;
+      if (Math.abs(avgDy)>1 || Math.abs(avgDx)>1) {
+        sendPayload({ action:"mouse_scroll", dx:avgDx/30, dy:-avgDy/30 });
+      }
+      tpTouches[t0.identifier] = { ...r0, x:t0.clientX, y:t0.clientY };
+      tpTouches[t1.identifier] = { ...r1, x:t1.clientX, y:t1.clientY };
+    }
+  }, { passive:false });
+  
+  trackpad.addEventListener("touchend", (e) => {
+    e.preventDefault();
+    const tc = e.touches.length;
+    const ec = e.changedTouches.length;
+    if (tc === 0 && tpTapTimer !== null) {
+      clearTimeout(tpTapTimer); tpTapTimer = null;
+      const t = e.changedTouches[0], r = tpTouches[t.identifier];
+      if (r) {
+        const dist = Math.hypot(t.clientX-r.sx, t.clientY-r.sy);
+        if (dist < 10) {
+          spawnRipple(t.clientX, t.clientY);
+          const btn = ec >= 2 ? "right" : "left";
+          sendPayload({ action:"mouse_click", button:btn });
+        }
+      }
+      trackpad.classList.remove("active-touch");
+    }
+    Array.from(e.changedTouches).forEach(t => delete tpTouches[t.identifier]);
+    if (tc === 0) trackpad.classList.remove("active-touch");
+  }, { passive:false });
+  
+  function spawnRipple(cx, cy) {
+    const rect = trackpad.getBoundingClientRect();
+    const r = document.createElement("div");
+    r.className = "tp-ripple";
+    r.style.left = (cx-rect.left)+"px";
+    r.style.top  = (cy-rect.top) +"px";
+    trackpad.appendChild(r);
+    setTimeout(() => r.remove(), 400);
+  }
+  
+  function mouseClick(b)       { sendPayload({ action:"mouse_click",  button:b, double:false }); }
+  function mouseDoubleClick(b) { sendPayload({ action:"mouse_click",  button:b, double:true  }); }
+  function mouseScroll(dx,dy)  { sendPayload({ action:"mouse_scroll", dx, dy }); }
+  function updateSpeed(v)      { mouseSpeedMult=v/5; document.getElementById("speed-val").textContent=v; }
+  
+  // ── Clipboard ─────────────────────────────────────────────────────────────────
+  function sendClipboard() {
+    const text = document.getElementById("clipboard-textarea").value.trim();
+    if (!text) { showClipSt("⚠️ Nothing to send","error"); return; }
+    document.getElementById("clipboard-send").disabled = true;
+    showClipSt("Sending…","");
+    sendPayload({ action:"clipboard_push", text });
+  }
+  
+  function sendClipboardThenPaste() {
+    const text = document.getElementById("clipboard-textarea").value.trim();
+    if (!text) { showClipSt("⚠️ Nothing to send","error"); return; }
+    document.getElementById("clipboard-send").disabled = true;
+    _pendingPaste = true;
+    showClipSt("Sending…","");
+    sendPayload({ action:"clipboard_push", text });
+  }
+  
+  function handleClipboardAck(error) {
+    document.getElementById("clipboard-send").disabled = false;
+    if (error) {
+      showClipSt(`❌ ${error}`, "error");
+    } else {
+      showClipSt("✅ Sent to laptop clipboard!", "success");
+      if (_pendingPaste) { _pendingPaste=false; setTimeout(() => sendCombo("Control","v"), 150); }
+    }
+    setTimeout(() => showClipSt("",""), 3000);
+  }
+  
+  function showClipSt(msg, cls) {
+    const el = document.getElementById("clipboard-status");
+    el.textContent=msg; el.className=cls;
+  }
+  
+  // ── Device List ───────────────────────────────────────────────────────────────
+  function renderDeviceList(devices) {
+    const list = document.getElementById("device-list");
+    if (!devices?.length) {
+      list.innerHTML=`<div style="font-size:.83rem;color:var(--text-dim);text-align:center;padding:14px;">No devices connected…</div>`;
+      return;
+    }
+    list.innerHTML = devices.map(d => {
+      const isMe = d.id === myDeviceId;
+      return `<div class="device-card ${isMe?"is-me":""}">
+        <div class="d-avatar">${esc(d.name||"?").charAt(0).toUpperCase()}</div>
+        <div class="d-info">
+          <div class="d-name">${esc(d.name||"Unknown")}</div>
+          <div class="d-sub">${isMe?"📍 This device":"📱 Connected"}</div>
+        </div>
+        ${isMe?'<span style="color:var(--accent);font-size:.72rem;font-weight:700;">YOU</span>':""}
+      </div>`;
+    }).join("");
+  }
+  
+  function saveDeviceName() {
+    const v = document.getElementById("my-name-input").value.trim();
+    if (!v) return;
+    myDeviceName = v;
+    localStorage.setItem("pk_name", v);
+    sendPayload({ action:"device_name", name:v });
+    const btn = document.getElementById("save-name-btn");
+    btn.textContent="✅ Saved!";
+    setTimeout(()=>btn.textContent="💾 Save Name", 1500);
+  }
+  
+  // FIX: & must be escaped to &amp; first, before < and > — otherwise
+  // &lt; / &gt; could themselves be double-escaped downstream.
+  function esc(s) {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+  
+  // ── Page Visibility (single listener) ────────────────────────────────────────
+  // FIX: was registered twice in the original, causing a double reconnect race.
+  document.addEventListener("visibilitychange", () => {
+    if (
+      document.visibilityState === "visible" &&
+      socket &&
+      socket.readyState === WebSocket.CLOSED
+    ) {
       clearTimeout(reconnectTimer);
       reconnectDelay = RECONNECT_BASE_MS;
       connect();
     }
-  }
-});
-
-function toggleTheme() {
-  const cur = document.documentElement.getAttribute("data-theme") || "dark";
-  const nxt = cur === "dark" ? "light" : "dark";
-  document.documentElement.setAttribute("data-theme", nxt);
-  document.getElementById("theme-toggle").textContent = nxt === "dark" ? "🌙" : "☀️";
-  localStorage.setItem("pk_theme", nxt);
-}
-
-// ── Tab Navigation ────────────────────────────────────────────────────────────
-function switchTab(name) {
-  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
-  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-  document.getElementById(`panel-${name}`).classList.add("active");
-  document.getElementById(`tab-${name}`).classList.add("active");
-  if (name === "keyboard") setTimeout(activateSentinel, 100);
-}
-
-// ── WebSocket ─────────────────────────────────────────────────────────────────
-function connect() {
-  setStatus("connecting", "Connecting…");
-  socket = new WebSocket(WS_URL);
-  socket.addEventListener("open",    onWsOpen);
-  socket.addEventListener("message", onWsMessage);
-  socket.addEventListener("close",   onWsClose);
-  socket.addEventListener("error",   () => socket.close());
-}
-
-function onWsOpen() {
-  reconnectDelay = RECONNECT_BASE_MS;
-  setStatus("connecting", "Authenticating…");
-  clearTimeout(reconnectTimer);
-
-  // Send initial message with tabId (auto-PIN if stored)
-  const storedPin = sessionStorage.getItem("pk_pin");
-  if (storedPin) {
-    sendPayload({ action: "pin_auth", pin: storedPin, tabId: myTabId });
-  } else if (SESSION_PIN === null) {
-    // No PIN required: send hello immediately
-    sendPayload({ action: "hello", tabId: myTabId });
-  }
-  // else: wait for user to enter PIN via UI (submitPin will include tabId)
-}
-
-function onWsMessage(e) {
-  let msg;
-  try { msg = JSON.parse(e.data); } catch { return; }
-  switch (msg.type) {
-    case "auth_ok":
-      myDeviceId = msg.device_id;
-      setStatus("connected", "Connected ✓");
-      // Store PIN in sessionStorage for auto-reconnect (only if PIN was used)
-      if (pinBuffer.length === 4) {
-        sessionStorage.setItem("pk_pin", pinBuffer);
-      }
-      pinBuffer = "";
-      showMainApp();
-      if (myDeviceName) {
-        sendPayload({ action: "device_name", name: myDeviceName, tabId: myTabId });
-        document.getElementById("my-name-input").value = myDeviceName;
-      }
-      break;
-    case "auth_fail":    handleAuthFail(msg.reason); break;
-    case "device_list":  renderDeviceList(msg.devices); break;
-    case "clipboard_ack":handleClipboardAck(msg.error); break;
-  }
-}
-
-function onWsClose() {
-  setStatus("disconnected", "Reconnecting…");
-  scheduleReconnect();
-}
-
-function scheduleReconnect() {
-  clearTimeout(reconnectTimer);
-  reconnectTimer = setTimeout(() => {
-    reconnectDelay = Math.min(reconnectDelay * RECONNECT_FACTOR, RECONNECT_MAX_MS);
-    connect();
-  }, reconnectDelay);
-}
-
-function setStatus(state, label) {
-  statusBadge.className = state;
-  statusText.textContent = label;
-}
-
-function sendPayload(p) {
-  if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(p));
-}
-
-// ── PIN ───────────────────────────────────────────────────────────────────────
-function showMainApp() {
-  pinOverlay.classList.add("hidden");
-  mainApp.style.display = "block";
-  setTimeout(activateSentinel, 200);
-}
-
-function pinKey(d) {
-  if (pinBuffer.length >= 4) return;
-  pinBuffer += d;
-  updatePinDots();
-  if (pinBuffer.length === 4) setTimeout(submitPin, 80);
-}
-
-function pinBackspace() {
-  pinBuffer = pinBuffer.slice(0, -1);
-  updatePinDots();
-}
-
-function updatePinDots() {
-  for (let i = 0; i < 4; i++) {
-    const dot = document.getElementById(`pd${i}`);
-    dot.classList.toggle("filled", i < pinBuffer.length);
-    dot.classList.remove("error");
-  }
-  document.getElementById("pin-error").textContent = "";
-}
-
-function submitPin() {
-  sendPayload({ action: "pin_auth", pin: pinBuffer, tabId: myTabId });
-}
-
-function handleAuthFail(reason) {
-  for (let i = 0; i < 4; i++) document.getElementById(`pd${i}`).classList.add("error");
-  document.getElementById("pin-error").textContent =
-    reason === "wrong_pin" ? "❌ Incorrect PIN — try again" : "Connection error";
-  pinBuffer = "";
-  setTimeout(updatePinDots, 600);
-}
-
-// ── Modifiers ─────────────────────────────────────────────────────────────────
-function pressActiveModifiers() {
-  Object.entries(modifiers).forEach(([m, h]) => { if (h) sendPayload({ action:"keydown", key:MOD_KEY[m] }); });
-}
-
-function releaseActiveModifiers() {
-  Object.entries(modifiers).forEach(([m, h]) => {
-    if (h) {
-      sendPayload({ action:"keyup", key:MOD_KEY[m] });
-      modifiers[m] = false;
-      document.getElementById(`mod-${m}`)?.classList.remove("active");
-    }
   });
-}
+  
+  // ── Boot — fetch config then connect ──────────────────────────────────────
+  // Fetches /api/config first so the PIN overlay decision is data-driven,
+  async function boot() {
+    if (myDeviceName) document.getElementById("my-name-input").value = myDeviceName;
+    renderPreview();
+  
+    // 1. Fetch server config — determines PIN requirement AND WebSocket URL
+    let wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${WS_PORT}`;
 
-function toggleModifier(mod) {
-  modifiers[mod] = !modifiers[mod];
-  document.getElementById(`mod-${mod}`)?.classList.toggle("active", modifiers[mod]);
-  sendPayload({ action: modifiers[mod] ? "keydown" : "keyup", key: MOD_KEY[mod] });
-  activateSentinel();
-}
+    try {
+      const res = await fetch("/api/config", { cache: "no-store" });
+      if (res.ok) {
+        const cfg = await res.json();
+        SESSION_PIN_REQUIRED = Boolean(cfg.pin_required);
 
-// ── Key Send ──────────────────────────────────────────────────────────────────
-function sendChar(char) {
-  pressActiveModifiers();
-  sendPayload({ action: "keypress", key: char });
-  releaseActiveModifiers();
-  vcInsert(applyModsToChar(char));
-  laptopCursorPos = cursorPos;
-}
-
-function sendSpecial(key) {
-  pressActiveModifiers();
-  sendPayload({ action: "keypress", key });
-  releaseActiveModifiers();
-  if (key === "CapsLock") capsLock = !capsLock;
-  vcApplySpecial(key);
-  laptopCursorPos = cursorPos;
-}
-
-function sendCombo(mod, key) {
-  sendPayload({ action: "keydown",  key: mod });
-  sendPayload({ action: "keypress", key });
-  sendPayload({ action: "keyup",    key: mod });
-}
-
-function applyModsToChar(ch) {
-  const sh = modifiers.Shift || modifiers.ShiftRight;
-  if (ch.length === 1) {
-    const u = ch.toUpperCase(), l = ch.toLowerCase();
-    if (ch !== u || ch !== l) return (capsLock ? !sh : sh) ? u : l;
-  }
-  return ch;
-}
-
-// ── Virtual Cursor ────────────────────────────────────────────────────────────
-function vcInsert(chars) {
-  previewText = previewText.slice(0, cursorPos) + chars + previewText.slice(cursorPos);
-  cursorPos  += [...chars].length;
-  renderPreview();
-}
-
-function vcApplySpecial(key) {
-  switch (key) {
-    case "Backspace":
-      if (cursorPos > 0) {
-        const a = [...previewText.slice(0, cursorPos)]; a.pop();
-        const b = a.join(""); previewText = b + previewText.slice(cursorPos); cursorPos = b.length;
-      } break;
-    case "Delete":
-      if (cursorPos < previewText.length) {
-        const a = [...previewText.slice(cursorPos)]; a.shift();
-        previewText = previewText.slice(0, cursorPos) + a.join("");
-      } break;
-    case "Enter": vcInsert("\n"); return;
-    case "Tab":   vcInsert("\t"); return;
-    case "ArrowLeft":
-      if (cursorPos > 0) cursorPos = [...previewText.slice(0, cursorPos)].slice(0,-1).join("").length;
-      break;
-    case "ArrowRight":
-      if (cursorPos < previewText.length) cursorPos += ([...previewText.slice(cursorPos)][0]||"").length;
-      break;
-    case "ArrowUp": {
-      const ls = previewText.lastIndexOf("\n", cursorPos-1);
-      const col = cursorPos-(ls+1);
-      if (ls===-1){cursorPos=0;break;}
-      const pls = previewText.lastIndexOf("\n", ls-1)+1;
-      cursorPos = Math.min(pls+col, ls); break;
-    }
-    case "ArrowDown": {
-      const nl = previewText.indexOf("\n", cursorPos);
-      if (nl===-1){cursorPos=previewText.length;break;}
-      const ls2 = previewText.lastIndexOf("\n", cursorPos-1)+1;
-      const col2 = cursorPos-ls2;
-      const nls = nl+1, nle = previewText.indexOf("\n", nls);
-      const nll = (nle===-1?previewText.length:nle)-nls;
-      cursorPos = nls+Math.min(col2, nll); break;
-    }
-    case "Home": { const ls=previewText.lastIndexOf("\n", cursorPos-1); cursorPos=ls+1; break; }
-    case "End":  { const ne=previewText.indexOf("\n", cursorPos); cursorPos=ne===-1?previewText.length:ne; break; }
-    default: flashDisplay(); return;
-  }
-  renderPreview();
-}
-
-// ── Cursor Sync ───────────────────────────────────────────────────────────────
-function syncLaptopCursor(newPos) {
-  const delta = newPos - laptopCursorPos;
-  if (delta === 0) return;
-  const key = delta < 0 ? "ArrowLeft" : "ArrowRight";
-  const n   = Math.abs(delta);
-  for (let i = 0; i < n; i++) sendPayload({ action: "keypress", key });
-  laptopCursorPos = newPos;
-  syncIndicator.textContent = `↔ ${n} key${n>1?"s":""} sent`;
-  syncIndicator.classList.add("show");
-  setTimeout(() => syncIndicator.classList.remove("show"), 1200);
-}
-
-// ── Preview Render ────────────────────────────────────────────────────────────
-function renderPreview() {
-  liveDisplay.textContent = "";
-  liveDisplay.appendChild(document.createTextNode(previewText.slice(0, cursorPos)));
-  const caret = document.createElement("span");
-  caret.className = "v-caret";
-  caret.setAttribute("aria-hidden", "true");
-  liveDisplay.appendChild(caret);
-  liveDisplay.appendChild(document.createTextNode(previewText.slice(cursorPos)));
-  placeholder.style.opacity = previewText.length === 0 ? "1" : "0";
-  caret.scrollIntoView({ block:"nearest", inline:"nearest" });
-  updateCursorInfo();
-  flashDisplay();
-}
-
-function updateCursorInfo() {
-  const lines = previewText.slice(0, cursorPos).split("\n");
-  cursorInfoEl.textContent = `col ${[...lines[lines.length-1]].length+1} | row ${lines.length}`;
-}
-
-function flashDisplay() {
-  liveDisplay.classList.add("active-preview");
-  if (document.activeElement !== sentinelEl) {
-    setTimeout(() => liveDisplay.classList.remove("active-preview"), 150);
-  }
-}
-
-// ── Tap-to-Reposition ─────────────────────────────────────────────────────────
-liveDisplay.addEventListener("pointerdown", (e) => {
-  e.preventDefault();
-  let offset = previewText.length;
-  try {
-    let node = null, off = 0;
-    if (document.caretRangeFromPoint) {
-      const r = document.caretRangeFromPoint(e.clientX, e.clientY);
-      if (r) { node = r.startContainer; off = r.startOffset; }
-    } else if (document.caretPositionFromPoint) {
-      const p = document.caretPositionFromPoint(e.clientX, e.clientY);
-      if (p) { node = p.offsetNode; off = p.offset; }
-    }
-    if (node) offset = domToText(node, off);
-  } catch(_) {}
-
-  const np = Math.max(0, Math.min(offset, previewText.length));
-  syncLaptopCursor(np);
-  cursorPos = np;
-  renderPreview();
-
-  if (document.activeElement === sentinelEl) {
-    sentinelEl.value = SENTINEL;
-    sentinelEl.setSelectionRange(SENTINEL.length, SENTINEL.length);
-  } else {
-    activateSentinel();
-  }
-});
-
-function domToText(target, offInNode) {
-  let total = 0;
-  function walk(n) {
-    if (n === target) return true;
-    if (n.nodeType === Node.TEXT_NODE) { total += n.textContent.length; return false; }
-    if (n.classList?.contains("v-caret")) return false;
-    for (const c of n.childNodes) { if (walk(c)) return true; }
-    return false;
-  }
-  walk(liveDisplay);
-  return total + offInNode;
-}
-
-// ── Sentinel ──────────────────────────────────────────────────────────────────
-sentinelEl.addEventListener("input", () => {
-  const cur = sentinelEl.value;
-  if (cur === SENTINEL) return;
-  if (cur.length > SENTINEL.length) {
-    for (const ch of cur.slice(SENTINEL.length)) { if (ch !== SENTINEL) sendChar(ch); }
-  } else if (cur.length === 0) {
-    sendSpecial("Backspace");
-  }
-  sentinelEl.value = SENTINEL;
-});
-
-sentinelEl.addEventListener("keydown", (e) => {
-  if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End"].includes(e.key)) {
-    e.preventDefault(); return;
-  }
-  if (e.key === "Backspace" && sentinelEl.value === SENTINEL) {
-    e.preventDefault(); sendSpecial("Backspace"); return;
-  }
-  if (e.key === "Enter") {
-    e.preventDefault(); sendSpecial("Enter"); sentinelEl.value = SENTINEL;
-  }
-});
-
-sentinelEl.addEventListener("blur", () => {
-  tapBtn.classList.remove("active");
-  tapBtn.textContent = "👆 Tap here to start typing";
-  liveDisplay.classList.remove("active-preview");
-});
-
-sentinelEl.addEventListener("focus", () => {
-  tapBtn.classList.add("active");
-  tapBtn.textContent = "⌨️ Keyboard active — start typing";
-  liveDisplay.classList.add("active-preview");
-  sentinelEl.value = SENTINEL;
-  sentinelEl.setSelectionRange(SENTINEL.length, SENTINEL.length);
-});
-
-function activateSentinel() {
-  sentinelEl.focus();
-  sentinelEl.value = SENTINEL;
-  sentinelEl.setSelectionRange(SENTINEL.length, SENTINEL.length);
-}
-
-function clearDisplay() {
-  previewText=""; cursorPos=0; laptopCursorPos=0;
-  liveDisplay.textContent=""; placeholder.style.opacity="1";
-  updateCursorInfo();
-}
-
-// ── Mouse Trackpad ────────────────────────────────────────────────────────────
-const trackpad = document.getElementById("trackpad-area");
-let tpTouches  = {}, tpTapTimer = null;
-
-trackpad.addEventListener("touchstart", (e) => {
-  e.preventDefault();
-  trackpad.classList.add("active-touch");
-  Array.from(e.changedTouches).forEach(t => {
-    tpTouches[t.identifier] = { x:t.clientX, y:t.clientY, sx:t.clientX, sy:t.clientY };
-  });
-  if (Object.keys(tpTouches).length === 1) {
-    tpTapTimer = setTimeout(() => { tpTapTimer = null; }, 250);
-  }
-}, { passive:false });
-
-trackpad.addEventListener("touchmove", (e) => {
-  e.preventDefault();
-  const tc = e.touches.length;
-  if (tc === 1) {
-    const t = e.touches[0], r = tpTouches[t.identifier];
-    if (!r) return;
-    const dx = (t.clientX - r.x) * mouseSpeedMult;
-    const dy = (t.clientY - r.y) * mouseSpeedMult;
-    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
-      sendPayload({ action:"mouse_move", dx, dy });
-      tpTouches[t.identifier] = { ...r, x:t.clientX, y:t.clientY };
-      tpTapTimer = null;
-    }
-  } else if (tc === 2) {
-    const t0=e.touches[0], t1=e.touches[1];
-    const r0=tpTouches[t0.identifier], r1=tpTouches[t1.identifier];
-    if (!r0 || !r1) return;
-    const avgDy = ((t0.clientY-r0.y)+(t1.clientY-r1.y))/2;
-    const avgDx = ((t0.clientX-r0.x)+(t1.clientX-r1.x))/2;
-    if (Math.abs(avgDy)>1 || Math.abs(avgDx)>1) {
-      sendPayload({ action:"mouse_scroll", dx:avgDx/30, dy:-avgDy/30 });
-    }
-    tpTouches[t0.identifier] = { ...r0, x:t0.clientX, y:t0.clientY };
-    tpTouches[t1.identifier] = { ...r1, x:t1.clientX, y:t1.clientY };
-  }
-}, { passive:false });
-
-trackpad.addEventListener("touchend", (e) => {
-  e.preventDefault();
-  const tc = e.touches.length;
-  const ec = e.changedTouches.length;
-  if (tc === 0 && tpTapTimer !== null) {
-    clearTimeout(tpTapTimer); tpTapTimer = null;
-    const t = e.changedTouches[0], r = tpTouches[t.identifier];
-    if (r) {
-      const dist = Math.hypot(t.clientX-r.sx, t.clientY-r.sy);
-      if (dist < 10) {
-        spawnRipple(t.clientX, t.clientY);
-        const btn = ec >= 2 ? "right" : "left";
-        sendPayload({ action:"mouse_click", button:btn });
+        // When server provides an override WS URL (tunnel mode),
+        // use it — otherwise fall back to the default LAN calculation
+        if (cfg.ws_url) {
+          wsUrl = cfg.ws_url;
+          console.log("[PhoneKey] Using tunnel WS URL:", wsUrl);
+        }
       }
+    } catch {
+      SESSION_PIN_REQUIRED = true;   // safe default
     }
-    trackpad.classList.remove("active-touch");
+  
+    // 2. Hide PIN overlay immediately if not required
+    if (!SESSION_PIN_REQUIRED) {
+      pinOverlay.classList.add("hidden");
+      mainApp.style.display = "block";   // show app shell immediately
+    }
+  
+    // 3. Open WebSocket with the resolved URL
+    connectTo(wsUrl);
   }
-  Array.from(e.changedTouches).forEach(t => delete tpTouches[t.identifier]);
-  if (tc === 0) trackpad.classList.remove("active-touch");
-}, { passive:false });
 
-function spawnRipple(cx, cy) {
-  const rect = trackpad.getBoundingClientRect();
-  const r = document.createElement("div");
-  r.className = "tp-ripple";
-  r.style.left = (cx-rect.left)+"px";
-  r.style.top  = (cy-rect.top) +"px";
-  trackpad.appendChild(r);
-  setTimeout(() => r.remove(), 400);
-}
-
-function mouseClick(b)       { sendPayload({ action:"mouse_click",  button:b, double:false }); }
-function mouseDoubleClick(b) { sendPayload({ action:"mouse_click",  button:b, double:true  }); }
-function mouseScroll(dx,dy)  { sendPayload({ action:"mouse_scroll", dx, dy }); }
-function updateSpeed(v)      { mouseSpeedMult=v/5; document.getElementById("speed-val").textContent=v; }
-
-// ── Clipboard ─────────────────────────────────────────────────────────────────
-function sendClipboard() {
-  const text = document.getElementById("clipboard-textarea").value.trim();
-  if (!text) { showClipSt("⚠️ Nothing to send","error"); return; }
-  document.getElementById("clipboard-send").disabled = true;
-  showClipSt("Sending…","");
-  sendPayload({ action:"clipboard_push", text });
-}
-
-function sendClipboardThenPaste() {
-  const text = document.getElementById("clipboard-textarea").value.trim();
-  if (!text) { showClipSt("⚠️ Nothing to send","error"); return; }
-  document.getElementById("clipboard-send").disabled = true;
-  _pendingPaste = true;
-  showClipSt("Sending…","");
-  sendPayload({ action:"clipboard_push", text });
-}
-
-function handleClipboardAck(error) {
-  document.getElementById("clipboard-send").disabled = false;
-  if (error) {
-    showClipSt(`❌ ${error}`, "error");
-  } else {
-    showClipSt("✅ Sent to laptop clipboard!", "success");
-    if (_pendingPaste) { _pendingPaste=false; setTimeout(() => sendCombo("Control","v"), 150); }
+  // ── WebSocket — accepts explicit URL ──────────────────────────────────────
+  function connectTo(url) {
+    WS_RESOLVED_URL = url;   // store for reconnects
+    setStatus("connecting", "Connecting…");
+    socket = new WebSocket(url);
+    socket.addEventListener("open",    onWsOpen);
+    socket.addEventListener("message", onWsMessage);
+    socket.addEventListener("close",   onWsClose);
+    socket.addEventListener("error",   () => socket.close());
   }
-  setTimeout(() => showClipSt("",""), 3000);
-}
 
-function showClipSt(msg, cls) {
-  const el = document.getElementById("clipboard-status");
-  el.textContent=msg; el.className=cls;
-}
-
-// ── Device List ───────────────────────────────────────────────────────────────
-function renderDeviceList(devices) {
-  const list = document.getElementById("device-list");
-  if (!devices?.length) {
-    list.innerHTML=`<div style="font-size:.83rem;color:var(--text-dim);text-align:center;padding:14px;">No devices connected…</div>`;
-    return;
+  function connect() {
+    // Used for reconnects — reuses the last resolved URL
+    connectTo(WS_RESOLVED_URL || `${WS_PROTO}://${location.hostname}:${WS_PORT}`);
   }
-  list.innerHTML = devices.map(d => {
-    const isMe = d.id === myDeviceId;
-    return `<div class="device-card ${isMe?"is-me":""}">
-      <div class="d-avatar">${(d.name||"?").charAt(0).toUpperCase()}</div>
-      <div class="d-info">
-        <div class="d-name">${esc(d.name||"Unknown")}</div>
-        <div class="d-sub">${isMe?"📍 This device":"📱 Connected"}</div>
-      </div>
-      ${isMe?'<span style="color:var(--accent);font-size:.72rem;font-weight:700;">YOU</span>':""}
-    </div>`;
-  }).join("");
-}
 
-function saveDeviceName() {
-  const v = document.getElementById("my-name-input").value.trim();
-  if (!v) return;
-  myDeviceName = v;
-  localStorage.setItem("pk_name", v);
-  sendPayload({ action:"device_name", name:v });
-  const btn = document.getElementById("save-name-btn");
-  btn.textContent="✅ Saved!";
-  setTimeout(()=>btn.textContent="💾 Save Name", 1500);
-}
-
-function esc(s) {
-  return s.replace(/&/g,"&").replace(/</g,"<").replace(/>/g,">");
-}
-
-// ── Page Visibility ───────────────────────────────────────────────────────────
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && (!socket || socket.readyState !== WebSocket.OPEN)) {
-    clearTimeout(reconnectTimer);
-    reconnectDelay = RECONNECT_BASE_MS;
-    connect();
-  }
-});
-
-// ── Boot ──────────────────────────────────────────────────────────────────────
-if (myDeviceName) document.getElementById("my-name-input").value = myDeviceName;
-renderPreview();
-connect();
+  // Add WS_RESOLVED_URL to State section:
+  let WS_RESOLVED_URL = null;
+  
+  boot();
 </script>
 </body>
 </html>

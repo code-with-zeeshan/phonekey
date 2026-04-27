@@ -5,6 +5,85 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.2.0] — 2026-04-27 — Modular Architecture Release
+
+### Added
+- **Interactive Startup TUI**: First-run configuration screen for connection
+  mode, PIN, and mouse speed — double-clicking the `.exe` no longer requires
+  CLI knowledge
+- **`system.py` Entry Point**: Dedicated process-lifecycle module handling CLI
+  parsing, instance locking, logging bootstrap, and Windows Ctrl+C registration
+  before `asyncio.run()` — resolves Ctrl+C failure in PyInstaller `.exe`
+- **`logging_setup.py`**: Single 30-line logging module replacing the entire
+  7-file logging suite; `setup_logging(level)` + `get_logger(name)` is all
+  PhoneKey needs
+- **`/api/config` Endpoint**: HTTP endpoint returns `{pin_required, version,
+  ws_url}` — replaces brittle server-side PIN string injection into HTML
+- **Tunnel WebSocket Routing**: When `--tunnel` is active, WebSocket traffic
+  is routed through the Cloudflare tunnel (`wss://`) so cross-network use
+  actually works end-to-end (previously only HTTP was tunneled)
+- **`--yes` / `-y` Flag**: Skip interactive setup and use defaults or explicit
+  CLI flags directly — useful for scripted/headless invocation
+- **`--log-level` Flag**: Runtime logging verbosity control
+  (`DEBUG/INFO/WARNING/ERROR`)
+
+### Fixed
+- **Ctrl+C in `.exe`**: `SetConsoleCtrlHandler` now registered before
+  `asyncio.run()`, resolving the PyInstaller SIGINT capture issue
+- **`esc()` XSS encoding**: `&` was being replaced with itself (`"&"`) instead
+  of `"&amp;"` — device names with `&` characters could corrupt rendered HTML
+- **Double `visibilitychange` listener**: Was registered twice in
+  `client/index.html`, causing a reconnect race condition on tab focus
+- **Stale PIN cache on auth failure**: `sessionStorage.removeItem("pk_pin")`
+  is now called on `auth_fail` — previously a wrong cached PIN would loop
+  forever without user prompt
+- **`tunnel_manager.py` missing imports**: `re`, `subprocess`, `platform`,
+  `shutil`, `os`, `time`, `sys`, `json`, `Path`, `Optional`, `urlopen` were
+  all used but not imported — file crashed on first import
+- **`start_http_server` used module-level `ARGS`**: Refactored to accept port
+  as a parameter, removing the module-level side-effect dependency
+
+### Changed
+- **Entry point**: `server.py` → `system.py` (update your run commands and
+  shortcuts). `server.py` is now a pure server module accepting `args` as a
+  parameter.
+- **`phonekey.spec`**: Entry point updated from `server.py` to `system.py`
+- **`_build_welcome_page`**: Replaced complex browser-chooser JavaScript
+  (which didn't work on mobile) with a clean instant redirect to `/index.html`
+- **QR code target**: Now encodes `/index.html` directly — no welcome page
+  redirect on QR scan
+- **`client/index.html` boot sequence**: `boot()` async function fetches
+  `/api/config` before opening WebSocket — PIN overlay decision is now
+  data-driven, not dependent on server HTML injection
+- **`client/index.html` WebSocket URL**: Reads `ws_url` from `/api/config`
+  response — uses tunnel WSS URL when provided, falls back to LAN calculation
+
+### Removed
+- **`logging_config.py`** — deleted; replaced by `logging_setup.py`
+- **`logging_context.py`** — deleted; `LogContext`, `log_context`,
+  `trace_span` were imported but never called in production code
+- **`logging_formatter.py`** — deleted; `logging.Formatter()` is sufficient
+- **`logging_handlers.py`** — deleted; `StreamHandler(sys.stdout)` is sufficient
+- **`logging_schema.py`** — deleted; no structured log consumers exist
+- **`logging_utils.py`** — deleted; `TimedLog`, `ExceptionLogger`,
+  `StructuredLogger` were imported but never invoked
+- **`log_ingestion.py`** — deleted; no log aggregation pipeline exists
+- **`logging_design.md`** — deleted; documents infrastructure that no longer exists
+- **`LOGGING.md`** — deleted; user-facing docs for deleted infrastructure
+- **`test_logging.py`** — deleted; tests for deleted modules
+- **`test_logging.py.bak`** — deleted; forgotten artifact, not tracked by git
+- **Module-level side effects in `server.py`**: `parse_args()`, `ARGS =`,
+  `_check_environment()`, `keyboard = KbController()`, `mouse = MsController()`
+  no longer execute at import time — all initialisation happens inside `main(args)`
+
+### Architecture
+```
+Before:  server.py (entry point + all logic) + 7 logging files
+After:   system.py (entry point) + server.py (logic) + logging_setup.py (30 lines)
+```
+
+---
+
 ## [3.1.0] — 2026-04-23 — Direct Connection Release
 
 ### Added

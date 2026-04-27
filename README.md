@@ -1,186 +1,67 @@
-# 📱→💻 PhoneKey v3.1.0
+# 📱 PhoneKey
 
-> Advanced phone-as-keyboard with mouse control, clipboard sync, secure connections, Cloudflare tunnel, direct QR connection, and tab-ID deduplication — lightweight, real-time, zero-install on phone.
+> Use your phone as a wireless keyboard and mouse — no app install required.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://python.org)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)]()
+PhoneKey runs a lightweight server on your laptop. Scan a QR code with your
+phone camera and your phone browser instantly becomes a full keyboard, trackpad,
+and clipboard bridge. No Bluetooth pairing, no app store, no cloud account.
+
+![Version](https://img.shields.io/badge/version-3.2.0-6c63ff)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
 ---
 
-## 🧠 Why PhoneKey v3.1.0?
+## ✨ Features
 
-| Problem | PhoneKey v3.1.0 Solution |
+| Feature | Details |
 |---|---|
-| Forgot physical keyboard | Full keyboard with modifier keys & function keys |
-| Need mouse control | Touch trackpad with gestures (move, click, scroll) |
-| Clipboard between devices | Phone-to-laptop clipboard sync |
-| Multiple device management | Device naming & real-time connection tracking |
-| Security concerns | 4-digit PIN authentication + HTTPS/WSS + Cloudflare tunnel |
-| Hard to share URL | QR code terminal display for instant scanning |
-| Certificate warnings | Cloudflare tunnel (no warnings!) |
-| Other tools show duplicates | Sentinel pattern + tab deduplication |
-| Other tools eat laptop RAM | ~20 MB Python process with all features |
-| Other tools require app install | Pure browser — no downloads needed |
-| Slow response | WebSocket over LAN (<5ms latency) |
-| Theme preferences | Dark/light mode toggle with persistence |
-| Hard to open in browser | Direct QR code connection - no browser chooser needed |
-| UI scrolls away | Sticky header and tab bar for fixed navigation |
-| Windows .exe crashes on close | Console control handler for graceful shutdown |
+| ⌨️ Full keyboard | All keys, modifiers (Shift/Ctrl/Alt), function keys F1–F12 |
+| 🖱️ Mouse trackpad | Move, click, right-click, scroll, double-click with touch gestures |
+| 📋 Clipboard sync | Type on phone → paste on laptop with one tap |
+| 🔐 PIN security | 4-digit PIN prevents unauthorised connections |
+| 🌐 Tunnel mode | Cloudflare Quick Tunnel — works across different networks |
+| 🔒 HTTPS/WSS | Self-signed certificate for encrypted local connections |
+| 📱 Multi-device | Multiple phones can connect simultaneously |
+| 🎨 Dark/Light theme | Persisted theme preference per device |
+| 🖥️ Interactive TUI | First-run setup screen — no CLI knowledge required |
+| 📦 Standalone binary | Single `.exe` / binary — zero Python install on target machine |
 
 ---
 
-## 🏗️ Architecture
+## 🚀 Quick Start
 
-```
-📱 Phone Browser          💻 Your Laptop
-┌──────────────┐          ┌────────────────────────┐
-│ index.html   │  WiFi    │ server.py              │
-│              │◄────────►│ ┌──────────────────┐   │
-│ Sentinel     │WebSocket │ │ WS Server  :8765 │   │
-│ Pattern      │          │ │ HTTP Server:8080 │   │
-│ input event  │          │ └────────┬─────────┘   │
-└──────────────┘          │          │             │
-                          │     asyncio Queue      │
-                          │          │             │
-                          │       pynput           │
-                          │  (OS keystroke inject) │
-                          └────────────────────────┘
-```
-
----
-
-## ⚙️ Tech Stack
-
-| Layer | Technology | Why |
-|---|---|---|
-| Server | Python 3.8+ | Lightweight, cross-platform async |
-| Key Injection | `pynput 1.7.6` | OS-level keyboard/mouse control |
-| Mouse Control | `pynput 1.7.6` | Touch trackpad with gestures |
-| WebSocket | `websockets 12.0` (asyncio) | Real-time bidirectional comms |
-| SSL/TLS | `cryptography 42.0.5` | Auto-generated HTTPS certificates |
-| QR Codes | `qrcode 7.4.2` | Terminal QR for easy URL sharing |
-| Clipboard | `pyperclip 1.8.2` | Cross-device clipboard sync |
-| Key Queue | `asyncio.Queue` | Prevents fast-typing key drops |
-| HTTP | `http.server` (stdlib) | Built-in web server |
-| Client | Vanilla HTML5/CSS3/ES6 | No frameworks, pure browser |
-| Input Fix | Sentinel + `input` event | Mobile keyboard compatibility |
-| Testing | `unittest` (stdlib) | Unit tests for core logic |
-
----
-
-## 🚀 v3.1.0 New Features
-
-### 🔐 Security & Authentication
-- **4-Digit PIN**: Secure connection with optional PIN authentication
-- **HTTPS/WSS**: Auto-generated self-signed certificates for encrypted connections
-- **Cloudflare Quick Tunnel**: Secure public URLs without certificate warnings
-- **Connection Deduplication**: Prevents duplicate connections from same browser tab
-- **Enhanced SSL Certificate Reuse**: Improved certificate validation with IP address matching for better compatibility
-
-### 🖱️ Advanced Input Control
-- **Mouse Trackpad**: Touch gestures for cursor movement, clicking, and scrolling
-- **Modifier Keys**: Full support for Shift, Ctrl, Alt combinations
-- **Function Keys**: F1-F12 with scrollable interface
-- **Speed Control**: Adjustable mouse movement sensitivity
-
-### 📋 Cross-Device Features
-- **Clipboard Sync**: Copy text from phone and paste on laptop instantly
-- **Multi-Device Support**: Connect multiple phones simultaneously with device naming
-- **Real-time Updates**: Live device list and connection status
-
-### 🎨 User Experience
-- **Dark/Light Theme**: Persistent theme toggle with system preference detection
-- **Tab-Based UI**: Organized interface (Keyboard, Mouse, Clipboard, Devices)
-- **QR Code Display**: Terminal QR codes for instant URL sharing
-- **Direct QR Connection**: Removed browser chooser page — direct connection via QR code scan
-- **Responsive Design**: Optimized for all mobile screen sizes
-- **UI Refinements**: Updated favicon, logo styling with icon, theme toggle size adjustment, footer text enhancement
-
-### 🛠️ Developer Features
-- **CLI Arguments**: Custom ports, HTTPS mode, tunnel mode, PIN disable, mouse speed
-- **Type Hints**: Full Python type annotations for maintainability
-- **Unit Tests**: Test coverage for core functionality
-- **Connection Metrics**: Active connection counting and logging
-- **Tab-ID Deduplication**: Prevent duplicate connections from same browser tab using tab_id tracking
-- **Cloudflare Tunnel**: Secure public URLs via cloudflared integration
-
-### 🐛 Fixes & Improvements
-- **PyInstaller Exclusions**: Removed problematic imports (`"email"`, `"urllib"`, `"html"`) causing build failures
-- **Connection Metrics**: Ensured proper cleanup on disconnect
-- **Duplicate Tab Connections**: Fixed race condition in device registration with atomic tab_id checking
-- **Simplified Authentication Flow**: Direct connection with optional PIN verification
-
----
-
-## 📋 Requirements
-
-- Python 3.8 or higher
-- Phone and laptop on the **same WiFi network**
-- Any modern phone browser (Chrome, Safari, Firefox)
-
----
-
-## ⚙️ Configuration
-
-PhoneKey supports configuration via command-line arguments:
-
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `--ws-port` | 8765 | WebSocket server port |
-| `--http-port` | 8080 | HTTP server port for client UI |
-| `--https` | False | Enable HTTPS/WSS (auto-generates self-signed cert) |
-| `--tunnel` | False | Enable Cloudflare Quick Tunnel for secure public URL |
-| `--no-pin` | False | Disable 4-digit PIN authentication |
-| `--mouse-speed` | 1.0 | Mouse speed multiplier (0.1-5.0) |
-
-Example:
-```bash
-python server.py --ws-port 9000 --http-port 9001 --https --mouse-speed 2.0
-```
-
-### Cloudflare Quick Tunnel
-
-For a secure public URL without certificate warnings:
-
-1. Run with `--tunnel` flag:
+### Option A — Python (recommended for development)
 
 ```bash
-python server.py --tunnel
+# 1. Clone
+git clone https://github.com/code-with-zeeshan/phonekey.git
+cd phonekey
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Run
+python system.py
 ```
 
-2. The system will automatically download `cloudflared` if not found (in `bin/` directory)
-3. Or manually download from [Cloudflare Quick Tunnels](https://github.com/cloudflare/cloudflared/releases) and place in project root, `bin/`, or system PATH
+An interactive setup screen guides you through connection mode, PIN, and
+mouse speed. Scan the QR code with your phone camera and you're done.
 
-The tunnel creates a temporary `https://*.trycloudflare.com` URL that:
-- Works from any network (no same-WiFi required)
-- Has no certificate warnings (valid HTTPS from Cloudflare)
-- Is accessible publicly (use with PIN for security)
-- Auto-downloads the cloudflared binary on first use
+### Option B — Standalone Binary (no Python required)
 
-### Constants (Internal)
+Download the latest binary for your platform from
+[Releases](https://github.com/code-with-zeeshan/phonekey/releases):
 
-The following internal constants can be modified in `server.py` if needed:
-
-| Constant | Default | Description |
-|----------|---------|-------------|
-| `KEY_INJECT_DELAY` | 0.012 | Delay between keystrokes (seconds) |
-| `WS_PING_INTERVAL` | 30 | WebSocket ping interval (seconds) |
-| `WS_PING_TIMEOUT` | 60 | WebSocket ping timeout (seconds) |
-
----
-
-## ⬇️ Download (No Python Required)
-
-| Platform | Download |
+| Platform | File |
 |---|---|
-| 🪟 Windows | [phonekey-windows.exe](https://github.com/code-with-zeeshan/phonekey/releases/latest/download/phonekey-windows.exe) |
-| 🍎 macOS   | [phonekey-macos](https://github.com/code-with-zeeshan/phonekey/releases/latest/download/phonekey-macos) |
-| 🐧 Linux   | [phonekey-linux](https://github.com/code-with-zeeshan/phonekey/releases/latest/download/phonekey-linux) |
+| Windows | `phonekey-windows.exe` |
+| macOS | `phonekey-macos` |
+| Linux | `phonekey-linux` |
 
-### Run the downloaded file:
-
-**Windows:** Double-click `phonekey-windows.exe`
+**Windows:** Double-click `phonekey-windows.exe` — an interactive setup
+screen appears in the terminal window.
 
 **macOS / Linux:**
 ```bash
@@ -188,204 +69,285 @@ chmod +x phonekey-macos   # or phonekey-linux
 ./phonekey-macos
 ```
 
-> 💡 macOS may show "unidentified developer" warning.
-> Go to System Settings → Privacy → Allow anyway.
-
 ---
 
-## 🚀 Quick Start
+## 🔌 Connection Modes
 
-### 1. Clone the repo
+### Mode 1 — Local WiFi (default)
+Phone and laptop must be on the **same WiFi network**.
+
+```
+Phone ──WiFi──► PhoneKey HTTP :8080
+                PhoneKey WS   :8765
+```
+
+No certificate warning. Works offline. Best for home/office use.
+
+### Mode 2 — Local HTTPS (`--https`)
+Same WiFi, but traffic is encrypted with a self-signed certificate.
 
 ```bash
-git clone https://github.com/code-with-zeeshan/phonekey.git
-cd phonekey
+python system.py --https
 ```
 
-### 2. Create virtual environment
+Phone will show a **one-time certificate warning** — tap
+"Advanced → Proceed" (Android) or "Show Details → Visit" (iOS).
+The certificate is regenerated automatically if your LAN IP changes.
+
+### Mode 3 — Cloudflare Tunnel (`--tunnel`)
+Phone and laptop can be on **completely different networks**.
 
 ```bash
-python -m venv venv
+python system.py --tunnel
 ```
 
-### 3. Activate it
-
-```bash
-# Windows
-venv\Scripts\activate
-
-# macOS / Linux
-source venv/bin/activate
-```
-
-### 4. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 5. (Optional) Run tests
-
-```bash
-python -m unittest test_server.py
-```
-
-### 6. Run the server
-
-#### Basic Usage (HTTP, PIN enabled)
-```bash
-python server.py
-```
-
-#### HTTPS Mode (recommended for iOS Safari)
-```bash
-python server.py --https
-```
-
-#### Custom Configuration
-```bash
-# Custom ports
-python server.py --ws-port 9000 --http-port 9001
-
-# Disable PIN for home network
-python server.py --no-pin
-
-# Adjust mouse speed (0.1-5.0)
-python server.py --mouse-speed 2.5
-
-# Full secure setup with HTTPS
-python server.py --https --ws-port 9443 --http-port 9444 --mouse-speed 1.5
-
-# Secure public URL with Cloudflare tunnel (no certificate warnings!)
-python server.py --tunnel --no-pin
-```
-
-### 7. Open on your phone
-
-The terminal will show:
+- Creates a temporary `https://*.trycloudflare.com` public URL
+- No certificate warnings — Cloudflare's certificate is trusted
+- `cloudflared` binary is **auto-downloaded** on first use
+- URL changes on every restart — re-scan QR code after restart
+- Both devices need internet access
 
 ```
-╔══════════════════════════════════════════════╗
-║         📱  PhoneKey  v3.1.0  💻            ║
-╠══════════════════════════════════════════════╣
-║  OS      : Windows                              ║
-║  Mode    : HTTPS/WSS 🔒                         ║
-║  PIN: 4827                                      ║
-╠══════════════════════════════════════════════╣
-║  Open on your phone:                             ║
-║  👉  https://192.168.0.104:8080                 ║
-╚══════════════════════════════════════════════════╝
-
-  📷  Scan QR code with your phone camera:
-
-  ██████████████  ██  ██████████████
-  ██          ██      ██          ██
-  ... (QR code) ...
-
-  🔐  When prompted on phone, enter PIN:  4827
-```
-
-Open that URL in your phone browser → tap "Tap here to start typing" → type!
-
----
-
-## 💻 OS-Specific Notes
-
-### Windows
-No extra steps — works out of the box.
-
-### macOS
-Grant Accessibility permission once:
-```
-System Settings → Privacy & Security → Accessibility → Enable Terminal
-```
-
-### Linux (Ubuntu/Debian)
-```bash
-sudo apt-get install linux-headers-$(uname -r) python3-dev gcc
-pip install -r requirements.txt
-```
-
-### Linux (Fedora/RHEL)
-```bash
-sudo dnf install kernel-headers-$(uname -r) python3-devel gcc
-pip install -r requirements.txt
+Phone ──Internet──► trycloudflare.com ──► cloudflared ──► PhoneKey
 ```
 
 ---
 
-## 📱 Phone UI Features
+## ⚙️ Configuration
 
-| Feature | Description |
+### Interactive TUI (default)
+
+Running `python system.py` or double-clicking the `.exe` shows:
+
+```
+╔══════════════════════════════════════════════════════════╗
+║           📱  PhoneKey  v3.2.0  💻                       ║
+║      Use your phone as a wireless keyboard & mouse       ║
+╚══════════════════════════════════════════════════════════╝
+
+  Choose connection mode:
+
+  [1]  Local WiFi    — phone & laptop on same network (default)
+  [2]  Local HTTPS   — same WiFi, encrypted
+  [3]  Cloudflare Tunnel  — phone & laptop on ANY network
+
+  Mode [1/2/3] →
+```
+
+### CLI Flags (skip the TUI)
+
+```bash
+python system.py [OPTIONS]
+
+Options:
+  --ws-port    PORT    WebSocket port          (default: 8765)
+  --http-port  PORT    HTTP server port        (default: 8080)
+  --https              Enable HTTPS/WSS
+  --no-pin             Disable PIN auth
+  --tunnel             Enable Cloudflare tunnel
+  --mouse-speed MULT   Mouse speed 0.1–5.0     (default: 1.0)
+  --log-level  LEVEL   DEBUG/INFO/WARNING/ERROR (default: INFO)
+  --yes / -y           Skip interactive setup, use defaults
+```
+
+**Examples:**
+```bash
+python system.py --yes                      # defaults, no prompts
+python system.py --no-pin --mouse-speed 2   # fast mouse, no PIN
+python system.py --tunnel --no-pin          # cross-network, no PIN
+python system.py --ws-port 9000 --http-port 9001  # custom ports
+```
+
+### Environment Variables
+
+All CLI flags have environment variable equivalents:
+
+| Variable | Equivalent flag | Default |
+|---|---|---|
+| `PHONEKEY_ENV` | (selects config profile) | `development` |
+| `PHONEKEY_LOG_LEVEL` | `--log-level` | `INFO` |
+
+---
+
+## 📱 Phone UI
+
+After scanning the QR code, your phone browser shows:
+
+| Tab | What it does |
 |---|---|
-| **Tap to Type** | Opens native phone keyboard |
-| **Live Preview** | Shows what you've typed with real cursor position |
-| **Cursor Repositioning** | Tap inside preview to move cursor; edits go there |
-| **Quick Keys** | Enter, Tab, Backspace, Escape, Delete, CapsLock, Arrows |
-| **Modifier Keys** | Shift, Ctrl, Alt — tap to hold, releases after next key |
-| **Function Keys** | F1–F12 in a scrollable row |
-| **Auto-reconnect** | Reconnects automatically if WiFi drops or screen turns off |
+| ⌨️ Keyboard | Live preview, quick keys, modifier keys, function keys |
+| 🖱️ Mouse | Trackpad, click buttons, scroll, speed slider |
+| 📋 Clipboard | Send text to laptop clipboard; Send+Paste in one tap |
+| 📱 Devices | See connected devices, set your device name |
 
 ---
 
-## 🔌 Connection Behavior
+## 🔒 Security
 
-| Event | What Happens |
-|---|---|
-| Phone screen turns OFF | WebSocket closes (OS kills background connections) |
-| Phone screen turns ON | Browser auto-reconnects with a new connection ID |
-| Multiple phones connect | All phones control the same laptop simultaneously |
-| WiFi drops briefly | Exponential backoff reconnect (1s → 2s → 4s → max 16s) |
+- **PIN authentication** — 4-digit PIN displayed in terminal, entered on phone
+- **Local-only by default** — no data leaves your LAN without `--tunnel`
+- **Self-signed TLS** — certificates stored locally, regenerated on IP change
+- **No persistent storage** — PIN changes on every server restart
+- **Tab deduplication** — prevents phantom connections from the same browser tab
 
----
-
-## ❓ FAQ
-
-**Q: Does the IP in the terminal change for different users?**
-> Yes. `server.py` auto-detects your laptop's LAN IP at runtime.
-> If someone in another country clones this repo, they will see
-> their own laptop's IP — not yours. GitHub only stores code, never IPs.
-
-**Q: Can multiple phones connect at once?**
-> Yes. All phones on the same WiFi can connect simultaneously.
-> Each controls the same laptop keyboard.
-
-**Q: Is it secure?**
-> PhoneKey is LAN-only. The WebSocket port (8765) is not exposed
-> to the internet — only devices on your local WiFi can reach it.
-
-**Q: Why does the terminal show "no close frame received or sent"?**
-> This is normal. It means the phone's browser closed the connection
-> abruptly (e.g. screen turned off) without sending a WebSocket
-> close handshake. The server handles it cleanly.
-
-**Q: Can I run this in Firebase Studio / GitHub Codespaces?**
-> No. The server must run on your local laptop. Cloud environments
-> have no physical display or keyboard input layer. Use Firebase Studio
-> only to edit code, then push to GitHub and run on your laptop.
+See [SECURITY.md](SECURITY.md) for responsible disclosure.
 
 ---
 
-## 📁 Project Structure
+## 🗂️ Project Structure
 
 ```
 phonekey/
-├── server.py           ← Main server (run this on your laptop)
-├── test_server.py     ← Unit tests for core logic
-├── requirements.txt    ← Python dependencies
-├── README.md           ← This file
-├── LICENSE             ← MIT License
-├── .gitignore
-└── client/
-    └── index.html      ← Phone browser UI (auto-served by server.py)
+├── system.py              # Entry point — CLI, interactive TUI, process lock
+├── server.py              # Core server — WebSocket, HTTP, input injection
+├── tunnel_manager.py      # Cloudflare tunnel lifecycle management
+├── logging_setup.py       # Logging configuration (replaces 7-file logging suite)
+├── config.py              # Configuration loader with environment overrides
+├── config.json            # Configuration schema and defaults
+│
+├── client/
+│   ├── index.html         # Phone browser SPA (keyboard, mouse, clipboard, devices)
+│   ├── phonekey.ico       # Multi-size favicon
+│   └── phonekey.svg       # SVG icon
+│
+├── test_server.py         # Unit + integration tests
+├── phonekey.spec          # PyInstaller build spec
+├── requirements.txt       # Runtime dependencies
+├── requirements-dev.txt   # Dev + build dependencies
+│
+├── .github/
+│   └── workflows/
+│       └── release.yml    # CI — builds binaries for Win/macOS/Linux on version tag
+│
+├── README.md
+├── CHANGELOG.md
+├── WORKFLOW.md
+├── CONTRIBUTING.md
+└── SECURITY.md
+```
+
+### Module Contracts (non-overlapping)
+
+| Module | Owns | Does NOT touch |
+|---|---|---|
+| `system.py` | Process lifecycle, CLI, instance lock, TUI | Server logic, networking |
+| `server.py` | WebSocket, HTTP, device registry, input | Arg parsing, locking |
+| `tunnel_manager.py` | cloudflared process (find, download, run) | HTTP/WS serving |
+| `logging_setup.py` | Logger configuration | Application logic |
+| `config.py` | Config schema + defaults | Runtime state |
+| `client/index.html` | Phone browser UI + WebSocket client | Server-side logic |
+
+---
+
+## 🏗️ Building Standalone Binaries
+
+```bash
+pip install -r requirements-dev.txt
+pyinstaller phonekey.spec
+```
+
+Output: `dist/phonekey` (Linux/macOS) or `dist/phonekey.exe` (Windows).
+
+The spec bundles `client/index.html` and `client/phonekey.ico` into the binary.
+Entry point is `system.py`.
+
+### CI Builds
+
+Pushing a version tag triggers GitHub Actions to build all three platforms:
+
+```bash
+git tag v3.2.0
+git push origin v3.2.0
+```
+
+Binaries are attached to the GitHub Release automatically.
+
+---
+
+## 🧪 Running Tests
+
+```bash
+python -m pytest test_server.py -v
+```
+
+Tests cover client file validation, device registration, and duplicate
+tab detection. Server tests are skipped gracefully if `pynput` is not
+available in the test environment.
+
+---
+
+## 📦 Dependencies
+
+| Package | Version | Purpose |
+|---|---|---|
+| `websockets` | 12.0 | WebSocket server |
+| `pynput` | 1.7.6 | OS-level keyboard + mouse injection |
+| `qrcode` | 7.4.2 | Terminal QR code display |
+| `cryptography` | 42.0.5 | Self-signed TLS certificate generation |
+| `pyperclip` | 1.8.2 | Cross-platform clipboard access |
+
+**Optional (auto-downloaded at runtime):**
+- `cloudflared` — Cloudflare tunnel binary (downloaded to `bin/` on first `--tunnel` use)
+
+---
+
+## 🖥️ Platform Support
+
+| Platform | Keyboard | Mouse | Clipboard | HTTPS | Tunnel |
+|---|---|---|---|---|---|
+| Windows 10/11 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| macOS 12+ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Linux (X11) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Linux (Wayland) | ✅ | ✅ | ⚠️ | ✅ | ✅ |
+
+> **macOS note:** System Preferences → Security & Privacy → Accessibility —
+> allow the terminal (or PhoneKey binary) to control your computer.
+
+> **Linux note:** If running without a display server, ensure `/dev/input`
+> is accessible. Cloud/headless environments are detected and rejected at startup.
+
+---
+
+## ❓ Troubleshooting
+
+**Phone can't connect (same WiFi)**
+- Confirm phone and laptop are on the same network (not guest/IoT VLAN)
+- Check firewall allows ports 8080 and 8765 inbound
+- Try `python system.py --no-pin` to rule out PIN issues
+
+**"Already running" error**
+- Another PhoneKey instance is using that port
+- Run `python system.py --ws-port 9000 --http-port 9001`
+
+**Certificate warning on HTTPS**
+- Expected behaviour with self-signed certs
+- Android: tap "Advanced" → "Proceed to site"
+- iOS: tap "Show Details" → "Visit this website"
+- Or use `--tunnel` for a trusted Cloudflare certificate
+
+**Cloudflare tunnel URL not appearing**
+- `cloudflared` auto-downloads to `bin/` on first run — needs internet
+- Check `bin/cloudflared` exists and is executable
+- Try running manually: `./bin/cloudflared tunnel --url http://localhost:8080`
+
+**Ctrl+C not working in .exe**
+- Known PyInstaller limitation — fixed in v3.2.0 via `SetConsoleCtrlHandler`
+- If still stuck, close the terminal window with the ✕ button
+
+**macOS: "cannot be opened because the developer cannot be verified"**
+```bash
+xattr -d com.apple.quarantine phonekey-macos
 ```
 
 ---
 
-## 🤝 Contributing
+## 📄 License
 
-1. Fork the repo
-2. Create a feature branch: `git checkout -b feat/your-feature`
-3. Commit: `git commit -m "feat: describe your change"`
-4. Push: `git push origin feat/your-feature`
-5. Open a Pull Request
+MIT — see [LICENSE](LICENSE).
+
+---
+
+## 👤 Author
+
+**Mohammad Zeeshan**
+Built because Bluetooth keyboard pairing is annoying and cloud tools are overkill.
