@@ -581,7 +581,7 @@ def print_qr_and_url(url: str) -> None:
         print("  📷  Scan QR code with your phone camera:")
         print()
         for row in qr.get_matrix():
-            print("  " + "".join("██" if cell else "  " for cell in row))
+            print("  " + "".join("█" if cell else " " for cell in row))
     except ImportError:
         print()
         print("  ⚠️  Install qrcode for QR display: pip install qrcode")

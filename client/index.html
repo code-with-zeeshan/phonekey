@@ -725,7 +725,8 @@
   let laptopCursorPos = 0;
   let capsLock        = false;
   let _pendingPaste   = false;
-  
+  let WS_RESOLVED_URL = null;
+
   // ── Server config (fetched once from /api/config) ─────────────────────────────
   // Replaces the brittle server-side SESSION_PIN string injection.
   let SESSION_PIN_REQUIRED = true;   // safe default; overwritten by boot()
@@ -1331,10 +1332,7 @@
     // Used for reconnects — reuses the last resolved URL
     connectTo(WS_RESOLVED_URL || `${WS_PROTO}://${location.hostname}:${WS_PORT}`);
   }
-
-  // Add WS_RESOLVED_URL to State section:
-  let WS_RESOLVED_URL = null;
-  
+ 
   boot();
 </script>
 </body>
