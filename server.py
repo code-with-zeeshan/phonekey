@@ -21,14 +21,13 @@ import socket
 import ssl
 import sys
 import threading
-import time
 import uuid
 from argparse import Namespace
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional, Callable, Awaitable
 
 # ─────────────────────────────────────────────
 #  Third-Party
@@ -48,6 +47,7 @@ input_log  = get_logger("phonekey.input")
 # ─────────────────────────────────────────────
 #  Tunnel (optional)
 # ─────────────────────────────────────────────
+TUNNEL_AVAILABLE: bool
 try:
     from tunnel_manager import TunnelManager
     TUNNEL_AVAILABLE = True
@@ -57,6 +57,7 @@ except ImportError:
 # ─────────────────────────────────────────────
 #  Path Resolution (script + PyInstaller)
 # ─────────────────────────────────────────────
+BASE_DIR: Path
 if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
     BASE_DIR = Path(sys._MEIPASS)
 else:
@@ -78,11 +79,12 @@ WS_PING_TIMEOUT   = 60
 # ─────────────────────────────────────────────
 #  Runtime globals — set inside main()
 # ─────────────────────────────────────────────
-_WS_PORT:     int            = DEFAULT_WS_PORT
-_USE_HTTPS:   bool           = False
-_TUNNEL_URL:  Optional[str]  = None
-_SESSION_PIN: Optional[str]  = None
-_MOUSE_SPEED: float          = 1.0
+_WS_PORT: int
+_USE_HTTPS: bool
+_TUNNEL_URL: Optional[str]
+_SESSION_PIN: Optional[str]
+_MOUSE_SPEED: float
+_WS_URL_OVERRIDE: Optional[str]
 
 # ─────────────────────────────────────────────
 #  Windows Ctrl+C — SetConsoleCtrlHandler
@@ -205,10 +207,10 @@ async def _broadcast_device_list() -> None:
 # ─────────────────────────────────────────────
 #  Key / Mouse Queue
 # ─────────────────────────────────────────────
-key_queue: asyncio.Queue = asyncio.Queue()
+key_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
 
 
-def _inject_key(data: dict, keyboard, SPECIAL_KEY_MAP: dict) -> None:
+def _inject_key(data: Dict[str, Any], keyboard: Any, SPECIAL_KEY_MAP: Dict[str, Any]) -> None:
     action    = data.get("action", "")
     key_value = data.get("key",    "")
     if not action or not key_value:
@@ -222,7 +224,7 @@ def _inject_key(data: dict, keyboard, SPECIAL_KEY_MAP: dict) -> None:
         input_log.error("Key inject failed '%s': %s", key_value, exc)
 
 
-def _inject_mouse(data: dict, mouse, MOUSE_BUTTON_MAP: dict) -> None:
+def _inject_mouse(data: Dict[str, Any], mouse: Any, MOUSE_BUTTON_MAP: Dict[str, Any]) -> None:
     from pynput.mouse import Button
     action = data.get("action", "")
     try:
@@ -240,7 +242,7 @@ def _inject_mouse(data: dict, mouse, MOUSE_BUTTON_MAP: dict) -> None:
         input_log.error("Mouse inject failed '%s': %s", action, exc)
 
 
-def _make_key_worker(keyboard, mouse, SPECIAL_KEY_MAP, MOUSE_BUTTON_MAP):
+def _make_key_worker(keyboard: Any, mouse: Any, SPECIAL_KEY_MAP: Dict[str, Any], MOUSE_BUTTON_MAP: Dict[str, Any]) -> Callable[[], Awaitable[None]]:
     async def key_worker() -> None:
         while True:
             data   = await key_queue.get()
@@ -258,7 +260,7 @@ def _make_key_worker(keyboard, mouse, SPECIAL_KEY_MAP, MOUSE_BUTTON_MAP):
 #  WebSocket Handler
 # ─────────────────────────────────────────────
 
-async def ws_handler(websocket) -> None:
+async def ws_handler(websocket: websockets.WebSocketServerProtocol) -> None:
     client_addr = websocket.remote_address
     device_id   = str(uuid.uuid4())
     device:     ConnectedDevice | None = None
@@ -542,7 +544,7 @@ def build_ssl_context(local_ip: str) -> ssl.SSLContext:
 # ─────────────────────────────────────────────
 #  Networking helpers
 # ─────────────────────────────────────────────
-_HTTP_PORT: int = DEFAULT_HTTP_PORT     # set in main()
+_HTTP_PORT: int  # set in main()
 
 
 def get_local_ip() -> str:
@@ -626,7 +628,6 @@ def print_banner(local_ip: str, ssl_ctx: ssl.SSLContext | None,
         print("\n  ⚠️  HTTPS: Phone will show a certificate warning.")
         print("     Android: Advanced → Proceed to site")
         print("     iOS    : Show Details → Visit this website")
-    print_qr_code(main_url)
     if _SESSION_PIN:
         print(f"  🔐  PIN:  {_SESSION_PIN}  ← Enter this on your phone\n")
 
@@ -739,7 +740,7 @@ def _setup_signals(stop_event: asyncio.Event,
 # ─────────────────────────────────────────────
 #  Main — called by system.py
 # ─────────────────────────────────────────────
-_CLIPBOARD_AVAILABLE: bool = False
+_CLIPBOARD_AVAILABLE: bool
 
 
 async def main(args: Namespace) -> None:
@@ -751,9 +752,9 @@ async def main(args: Namespace) -> None:
     global _HTTP_PORT, _CLIPBOARD_AVAILABLE, _WS_URL_OVERRIDE
 
     # ── Validate + store runtime config ──────────────────────────────────
-    _WS_PORT     = args.ws_port
-    _HTTP_PORT   = args.http_port
-    _USE_HTTPS   = args.https
+    _WS_PORT = args.ws_port
+    _HTTP_PORT = args.http_port
+    _USE_HTTPS = args.https
     _MOUSE_SPEED = max(0.1, min(5.0, args.mouse_speed))
     _SESSION_PIN = (
         None if args.no_pin
@@ -792,7 +793,8 @@ async def main(args: Namespace) -> None:
     # ── Tunnel (optional) ─────────────────────────────────────────────────
     tunnel_url:     Optional[str]           = None
     _TUNNEL_URL = None
-    _WS_URL_OVERRIDE = None   # when set, client uses this WS URL instead of default
+    _WS_URL_OVERRIDE = None  # when set, client uses this WS URL instead of default
+    tunnel_manager = None
 
     if args.tunnel:
         if not TUNNEL_AVAILABLE:
@@ -819,6 +821,7 @@ async def main(args: Namespace) -> None:
 
     # ── Banner ────────────────────────────────────────────────────────────
     print_banner(local_ip, ssl_ctx, tunnel_url)
+    ws_proto = "wss" if (ssl_ctx or tunnel_url) else "ws"
     print_qr_and_url(_TUNNEL_URL or f"{'https' if ssl_ctx else 'http'}://{local_ip}:{_HTTP_PORT}")
     logger.info("🔌 WebSocket (%s) → port %d", ws_proto.upper(), _WS_PORT)
 

@@ -10,9 +10,6 @@ __version__ = "3.1.0"
 import argparse
 import asyncio
 import errno
-import os
-import platform
-import signal
 import socket
 import sys
 
