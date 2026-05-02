@@ -5,27 +5,43 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [3.2.0] — 2026-04-27 — Modular Architecture Release
+## [3.2.0] — 2026-05-02 — Thread-Safety & Feature Release
 
 ### Added
-- **Interactive Startup TUI**: First-run configuration screen for connection
-  mode, PIN, and mouse speed — double-clicking the `.exe` no longer requires
-  CLI knowledge
-- **`system.py` Entry Point**: Dedicated process-lifecycle module handling CLI
-  parsing, instance locking, logging bootstrap, and Windows Ctrl+C registration
-  before `asyncio.run()` — resolves Ctrl+C failure in PyInstaller `.exe`
-- **`logging_setup.py`**: Single 30-line logging module replacing the entire
-  7-file logging suite; `setup_logging(level)` + `get_logger(name)` is all
-  PhoneKey needs
-- **`/api/config` Endpoint**: HTTP endpoint returns `{pin_required, version,
-  ws_url}` — replaces brittle server-side PIN string injection into HTML
-- **Tunnel WebSocket Routing**: When `--tunnel` is active, WebSocket traffic
-  is routed through the Cloudflare tunnel (`wss://`) so cross-network use
-  actually works end-to-end (previously only HTTP was tunneled)
-- **`--yes` / `-y` Flag**: Skip interactive setup and use defaults or explicit
-  CLI flags directly — useful for scripted/headless invocation
-- **`--log-level` Flag**: Runtime logging verbosity control
-  (`DEBUG/INFO/WARNING/ERROR`)
+- **Clipboard History**: Persistent clipboard history with file-based storage
+- **File Transfer**: Send files from phone to laptop (up to 10MB, multiple formats)
+- **Macro Recording**: Record and playback keyboard/mouse sequences per device
+- **Gesture Commands**: Touch gestures for window management (alt-tab, show desktop, etc.)
+- **Multi-Language UI**: English, 中文, Español support with language switcher
+- **Clipboard Sync Direction**: Control clipboard sync direction (phone→laptop, laptop→phone, bidirectional)
+- **Connection History**: Track past connections and mark favorites
+- **QR Code Persistence**: Last QR code data stored for quick reconnection
+- **Grace Period Reconnection**: Session state preserved after disconnect for quick reconnection
+- **Rate Limiting**: Prevent brute-force attacks on PIN authentication
+- **WebSocket Broadcast**: Track connected clients for broadcast messages
+- **Laptop→Phone Clipboard Sync**: Background monitoring for clipboard changes on laptop
+
+### Fixed
+- **Thread-Safety**: Added `_WEBSOCKETS_LOCK` for WebSocket set operations
+- **Thread-Safety**: All shared state (`_CLIPBOARD_HISTORY`, `_MACROS`, `_CONNECTION_HISTORY`, `_FAVORITE_DEVICES`) properly locked
+- **Thread-Safety**: Added `_GRACE_PERIOD_STATES` lock for reconnection state management
+- **Undefined Function**: Implemented `_process_gesture_command()` for gesture handling
+- **Missing Function**: Implemented `changeLanguage()` in client for UI language switching
+- **Duplicate IDs**: Fixed duplicate `clipboard-section-label` ID in HTML
+- **QR Code Aspect Ratio**: Changed to double-width rendering for more square appearance
+- **File Input**: Added `onchange="sendFile()"` handler to file input element
+
+### Changed
+- **Version**: Bumped from 3.1.0 to 3.2.0
+- **README.md**: Updated features list and Phone UI documentation
+- **WORKFLOW.md**: Fixed git clone URL to correct repository
+- **config.json**: Enhanced documentation for battery, security, sensitivity, and macro options
+- **system.py**: Refactored interactive setup with clearer comments and input validation
+- **QR Code Rendering**: Changed from single-width to double-width characters for better aspect ratio
+
+### Architecture
+- **Async Locks**: All shared mutable state protected by asyncio locks
+- **Modular Design**: Clear separation of concerns between connection management, clipboard, macros, and gestures
 
 ### Fixed
 - **Ctrl+C in `.exe`**: `SetConsoleCtrlHandler` now registered before

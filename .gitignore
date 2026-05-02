@@ -30,3 +30,6 @@ Desktop.ini
 *.swo
 .env
 .env.local
+
+# ── EXTENTION ──────────────────────────
+.kilocode/

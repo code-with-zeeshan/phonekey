@@ -1,13 +1,13 @@
 {
   "title": "PhoneKey Configuration",
-  "description": "Centralized configuration for PhoneKey v3.1.0 - Phone-as-Keyboard & Mouse Server",
-  "version": "3.1.0",
+  "description": "Centralized configuration for PhoneKey v3.2.0 - Phone-as-Keyboard & Mouse Server",
+  "version": "3.2.0",
 
   "application": {
     "version": {
       "type": "string",
       "description": "PhoneKey application version",
-      "default": "3.1.0",
+      "default": "3.2.0",
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
     },
     "name": {
@@ -69,27 +69,104 @@
   },
 
 
-  "input": {
-    "keyboard": {
-      "key_inject_delay": {
-        "type": "number",
-        "description": "Delay between keystrokes in seconds to prevent key drops",
-        "default": 0.012,
-        "minimum": 0.001,
-        "maximum": 1.0,
-        "unit": "seconds"
-      }
-    },
-    "mouse": {
-      "speed_multiplier": {
-        "type": "number",
-        "description": "Mouse movement speed multiplier (0.1 = slow, 5.0 = fast)",
-        "default": 1.0,
-        "minimum": 0.1,
-        "maximum": 5.0
-      }
-    }
-  },
+   "input": {
+     "keyboard": {
+       "key_inject_delay": {
+         "type": "number",
+         "description": "Delay between keystrokes in seconds to prevent key drops",
+         "default": 0.012,
+         "minimum": 0.001,
+         "maximum": 1.0,
+         "unit": "seconds"
+       },
+       "layout": {
+         "type": "string",
+         "description": "Keyboard layout for key mapping (qwerty, qwertz, azerty, dvorak, colemak)",
+         "default": "qwerty",
+         "enum": ["qwerty", "qwertz", "azerty", "dvorak", "colemak"]
+       }
+     },
+     "mouse": {
+       "speed_multiplier": {
+         "type": "number",
+         "description": "Mouse movement speed multiplier (0.1 = slow, 5.0 = fast)",
+         "default": 1.0,
+         "minimum": 0.1,
+         "maximum": 5.0
+       }
+     },
+     "gestures": {
+       "sensitivity": {
+         "type": "number",
+         "description": "Gesture detection sensitivity multiplier (0.1 = low sensitivity, 1.0 = high sensitivity). Higher values require less movement to trigger gestures.",
+         "default": 0.5,
+         "minimum": 0.1,
+         "maximum": 1.0
+       },
+       "swipe_threshold": {
+         "type": "number",
+         "description": "Minimum swipe distance in pixels to register as a gesture",
+         "default": 50,
+         "minimum": 10,
+         "maximum": 200
+       },
+       "tap_threshold": {
+         "type": "number",
+         "description": "Maximum time in milliseconds for a tap gesture",
+         "default": 300,
+         "minimum": 100,
+         "maximum": 1000
+       }
+     },
+     "macros": {
+       "enabled": {
+         "type": "boolean",
+         "description": "Enable macro recording and playback functionality",
+         "default": true
+       },
+       "max_macros": {
+         "type": "integer",
+         "description": "Maximum number of macros to store per device. Macros are stored per-device and shared across all tabs of the same device.",
+         "default": 10,
+         "minimum": 1,
+         "maximum": 50
+       },
+       "max_macro_length": {
+         "type": "integer",
+         "description": "Maximum number of actions per macro. Prevents excessive memory usage from very long recordings.",
+         "default": 1000,
+         "minimum": 10,
+         "maximum": 10000
+       },
+       "storage_enabled": {
+         "type": "boolean",
+         "description": "Enable persistent storage of macros",
+         "default": true
+       }
+     }
+   },
+  
+  
+    "clipboard": {
+     "sync_direction": {
+       "type": "string",
+       "description": "Clipboard synchronization direction: 'phone_to_laptop' (phone→laptop only), 'laptop_to_phone' (laptop→phone only), or 'bidirectional' (both directions)",
+       "default": "phone_to_laptop",
+       "enum": ["phone_to_laptop", "laptop_to_phone", "bidirectional"]
+     },
+     "laptop_read_interval": {
+       "type": "integer",
+       "description": "Interval in seconds to check laptop clipboard for changes when laptop→phone sync is enabled. Lower values provide faster sync but may impact battery life. Recommended: 2-5 seconds.",
+       "default": 2,
+       "minimum": 1,
+       "maximum": 10
+     },
+     "history_persistence_enabled": {
+       "type": "boolean",
+       "description": "Enable persistent storage of clipboard history across restarts. Note: clipboard history may contain sensitive information. Disable for enhanced privacy.",
+       "default": true
+     }
+   },
 
 
   "security": {

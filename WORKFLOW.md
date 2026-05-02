@@ -45,7 +45,7 @@ phonekey/
 
 ```bash
 # 1. Clone
-git clone https://github.com/yourusername/phonekey.git
+git clone https://github.com/code-with-zeeshan/phonekey.git
 cd phonekey
 
 # 2. Create virtual environment

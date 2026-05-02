@@ -98,6 +98,20 @@
       flex-shrink: 0;
     }
     #theme-toggle:active { transform: scale(0.88); }
+   
+    /* ── Language Selector ── */
+    #language-select {
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all var(--tr);
+    }
+    #language-select:hover { border-color: var(--accent); }
+    #language-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent); }
 
     /* ── Status Badge ── */
     #status-badge {
@@ -411,6 +425,7 @@
     .d-info { flex: 1; }
     .d-name  { font-size: .88rem; font-weight: 600; }
     .d-sub   { font-size: .7rem; color: var(--text-dim); margin-top: 1px; }
+    .d-sub .d-battery { margin-left: 4px; }
 
     #my-name-input {
       width: 100%; padding: 9px 12px;
@@ -441,8 +456,8 @@
 <!-- ── PIN Overlay ── -->
 <div id="pin-overlay">
   <div class="pin-logo">🔐</div>
-  <div class="pin-title">Enter Connection PIN</div>
-  <div class="pin-sub">Check the PIN in your laptop terminal</div>
+  <div class="pin-title" id="pin-title-text">Enter Connection PIN</div>
+  <div class="pin-sub" id="pin-sub-text">Check the PIN in your laptop terminal</div>
   <div id="pin-dots">
     <div class="pin-dot" id="pd0"></div>
     <div class="pin-dot" id="pd1"></div>
@@ -473,6 +488,12 @@
    <div id="sticky-header">
      <div class="logo"><span class="logo-icon">🔐</span>Phone<span>Key</span></div>
      <div class="header-right">
+      <!-- Language selector -->
+      <select id="language-select" onchange="changeLanguage(this.value)" title="Language">
+        <option value="en">🇬🇧 EN</option>
+        <option value="zh">🇨🇳 中文</option>
+        <option value="es">🇪🇸 ES</option>
+      </select>
       <!-- Theme toggle — Fix 2: 28px circle -->
       <button id="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌙</button>
       <div id="status-badge" class="connecting">
@@ -585,7 +606,7 @@
         <button class="fn-btn" onclick="sendSpecial('F12')">F12</button>
       </div>
     </div>
-    <footer>PhoneKey v3.1.0 — Lightweight &amp; Local</footer>
+    <footer>PhoneKey v3.2.0 — Lightweight &amp; Local</footer>
   </div>
 
   <!-- ══ MOUSE TAB ══ -->
@@ -637,32 +658,42 @@
         <span id="speed-val">5</span>
       </div>
     </div>
-    <footer>PhoneKey v3.1.0 — Lightweight &amp; Local</footer>
+    <footer>PhoneKey v3.2.0 — Lightweight &amp; Local</footer>
   </div>
 
-  <!-- ══ CLIPBOARD TAB ══ -->
-  <div class="tab-panel" id="panel-clipboard">
-    <div>
-      <div class="section-label">Phone → Laptop Clipboard</div>
-      <p style="font-size:.8rem;color:var(--text-dim);margin-bottom:8px;line-height:1.5;">
-        Type or paste below → send to laptop clipboard → press Ctrl+V on laptop.
-      </p>
-      <textarea id="clipboard-textarea"
-                placeholder="Type or paste text here…"
-                autocorrect="off" spellcheck="false"></textarea>
-    </div>
-    <button id="clipboard-send" onclick="sendClipboard()">📋 Send to Laptop Clipboard</button>
-    <div id="clipboard-status"></div>
-    <div style="border-top:1px solid var(--border);padding-top:10px;">
-      <div class="section-label">Quick Shortcuts</div>
-      <div class="btn-grid-3">
-        <button class="action-btn" onclick="sendClipboardThenPaste()"><span class="icon">⚡</span>Send+Paste</button>
-        <button class="action-btn" onclick="sendCombo('Control','v')"><span class="icon">📌</span>Ctrl+V</button>
-        <button class="action-btn" onclick="sendCombo('Control','a')"><span class="icon">⬛</span>Ctrl+A</button>
-      </div>
-    </div>
-    <footer>PhoneKey v3.1.0 — Lightweight &amp; Local</footer>
-  </div>
+    <!-- ══ CLIPBOARD TAB ══ -->
+    <div class="tab-panel" id="panel-clipboard">
+      <div>
+        <div class="section-label" id="clipboard-section-label">Phone → Laptop Clipboard</div>
+        <p style="font-size:.8rem;color:var(--text-dim);margin-bottom:8px;line-height:1.5;" id="clipboard-section-description">
+          Type or paste below → send to laptop clipboard → press Ctrl+V on laptop.
+        </p>
+       <textarea id="clipboard-textarea"
+                 placeholder="Type or paste text here…"
+                 autocorrect="off" spellcheck="false"></textarea>
+     </div>
+     <button id="clipboard-send" onclick="sendClipboard()">📋 Send to Laptop Clipboard</button>
+     <div id="clipboard-status"></div>
+      <div style="border-top:1px solid var(--border);padding-top:10px;">
+        <div class="section-label" id="clipboard-history-label">Clipboard History</div>
+        <div id="clipboard-history-list" style="max-height:150px;overflow-y:auto;margin-top:5px;">
+          <div style="font-size:.83rem;color:var(--text-dim);text-align:center;padding:10px;" id="clipboard-empty-msg">No history yet</div>
+        </div>
+        <div class="section-label" id="file-transfer-section-label">File Transfer</div>
+        <div style="margin:10px 0;" id="file-drop-zone">
+          <input type="file" id="file-input" style="display:none;" onchange="sendFile()">
+          <button class="action-btn" onclick="document.getElementById('file-input').click()" id="select-file-btn">📎 Select File to Send</button>
+          <div id="file-status" style="font-size:.8rem;color:var(--text-dim);margin-top:5px;min-height:1.2em;"></div>
+        </div>
+       <div class="section-label">Quick Shortcuts</div>
+       <div class="btn-grid-3">
+         <button class="action-btn" onclick="sendClipboardThenPaste()"><span class="icon">⚡</span>Send+Paste</button>
+         <button class="action-btn" onclick="sendCombo('Control','v')"><span class="icon">📌</span>Ctrl+V</button>
+         <button class="action-btn" onclick="sendCombo('Control','a')"><span class="icon">⬛</span>Ctrl+A</button>
+       </div>
+     </div>
+     <footer>PhoneKey v3.2.0 — Lightweight &amp; Local</footer>
+   </div>
 
   <!-- ══ DEVICES TAB ══ -->
   <div class="tab-panel" id="panel-devices">
@@ -682,7 +713,7 @@
         </div>
       </div>
     </div>
-    <footer>PhoneKey v3.1.0 — Lightweight &amp; Local</footer>
+    <footer>PhoneKey v3.2.0 — Lightweight &amp; Local</footer>
   </div>
 
 </div><!-- /#main-app -->
@@ -690,34 +721,107 @@
 <script>
   "use strict";
   
-  // ── Config ────────────────────────────────────────────────────────────────────
-  const WS_PORT           = 8765;
-  const WS_PROTO          = location.protocol === "https:" ? "wss" : "ws";
-  const WS_URL            = `${WS_PROTO}://${location.hostname}:${WS_PORT}`;
-  const RECONNECT_BASE_MS = 1000;
-  const RECONNECT_MAX_MS  = 16000;
-  const RECONNECT_FACTOR  = 2;
-  const SENTINEL          = "\u200B";
-  
-  // ── DOM ───────────────────────────────────────────────────────────────────────
-  const sentinelEl    = document.getElementById("sentinel-input");
-  const tapBtn        = document.getElementById("tap-to-type");
-  const liveDisplay   = document.getElementById("live-display");
-  const placeholder   = document.getElementById("preview-placeholder");
-  const cursorInfoEl  = document.getElementById("cursor-info");
-  const syncIndicator = document.getElementById("sync-indicator");
-  const statusBadge   = document.getElementById("status-badge");
-  const statusText    = document.getElementById("status-text");
-  const pinOverlay    = document.getElementById("pin-overlay");
-  const mainApp       = document.getElementById("main-app");
-  
-  // ── State ─────────────────────────────────────────────────────────────────────
-  let socket          = null;
-  let reconnectDelay  = RECONNECT_BASE_MS;
-  let reconnectTimer  = null;
-  let myDeviceId      = null;
-  let myDeviceName    = localStorage.getItem("pk_name") || "";
-  let myTabId         = sessionStorage.getItem("pk_tab_id") || crypto.randomUUID();
+   // ── Config ────────────────────────────────────────────────────────────────────
+    let WS_PORT           = 8765; // Will be overridden by server config
+    const WS_PROTO          = location.protocol === "https:" ? "wss" : "ws";
+    let WS_URL            = `${WS_PROTO}://${location.hostname}:${WS_PORT}`;
+    const RECONNECT_BASE_MS = 1000;
+    const RECONNECT_MAX_MS  = 16000;
+    const RECONNECT_FACTOR  = 2;
+    const SENTINEL          = "\u200B";
+    
+    // ── Multi-language Support ──────────────────────────────────────────────────
+    const TRANSLATIONS = {
+      en: {
+        // UI labels
+        keyboard: "Keyboard", mouse: "Mouse", clipboard: "Clipboard",
+        connection: "Connection", settings: "Settings",
+        // Status
+        connecting: "Connecting…", connected: "Connected ✓", disconnected: "Reconnecting…",
+        // Device
+        myDeviceName: "My Device Name", saveName: "💾 Save Name",
+        noDevices: "No devices connected…",
+        // Clipboard
+        clipboardHistory: "Clipboard History", copyToPhone: "Copy to Phone",
+        copiedToLaptop: "📋 Copied to laptop", copiedToPhone: "📋 Copied to phone",
+        clearHistory: "Clear History",
+        // File transfer
+        fileTransfer: "File Transfer", dragDrop: "Drag & drop files here",
+        fileTooLarge: "File too large", fileTypeNotAllowed: "File type not allowed",
+        // Connection
+        connectionHistory: "Connection History", favorites: "Favorites",
+        toggleFavorite: "Toggle Favorite",
+        // PIN
+        enterPin: "Enter Connection PIN", pinSubtitle: "Enter the 4-digit PIN shown on your laptop",
+        // Settings
+        language: "Language", theme: "Theme",
+        // Battery
+        batteryLevel: "Battery",
+        // General
+        all: "All",
+      },
+      zh: {
+        keyboard: "键盘", mouse: "鼠标", clipboard: "剪贴板",
+        connection: "连接", settings: "设置",
+        connecting: "连接中…", connected: "已连接 ✓", disconnected: "重新连接中…",
+        myDeviceName: "我的设备名称", saveName: "💾 保存名称",
+        noDevices: "没有已连接的设备…",
+        clipboardHistory: "剪贴板历史", copyToPhone: "复制到手机",
+        copiedToLaptop: "📋 已复制到电脑", copiedToPhone: "📋 已复制到手机",
+        clearHistory: "清除历史记录",
+        fileTransfer: "文件传输", dragDrop: "拖放文件到此处",
+        fileTooLarge: "文件过大", fileTypeNotAllowed: "不允许的文件类型",
+        connectionHistory: "连接历史", favorites: "收藏夹",
+        toggleFavorite: "切换收藏",
+        enterPin: "输入连接 PIN 码", pinSubtitle: "输入电脑上显示的 4 位 PIN 码",
+        language: "语言", theme: "主题",
+        batteryLevel: "电量",
+        all: "全部",
+      },
+      es: {
+        keyboard: "Teclado", mouse: "Ratón", clipboard: "Portapapeles",
+        connection: "Conexión", settings: "Configuración",
+        connecting: "Conectando…", connected: "Conectado ✓", disconnected: "Reconectando…",
+        myDeviceName: "Nombre de mi dispositivo", saveName: "💾 Guardar nombre",
+        noDevices: "No hay dispositivos conectados…",
+        clipboardHistory: "Historial del portapapeles", copyToPhone: "Copiar al teléfono",
+        copiedToLaptop: "📋 Copiado al portátil", copiedToPhone: "📋 Copiado al teléfono",
+        clearHistory: "Borrar historial",
+        fileTransfer: "Transferencia de archivos", dragDrop: "Arrastra y suelta archivos aquí",
+        fileTooLarge: "Archivo demasiado grande", fileTypeNotAllowed: "Tipo de archivo no permitido",
+        connectionHistory: "Historial de conexión", favorites: "Favoritos",
+        toggleFavorite: "Alternar favorito",
+        enterPin: "Introducir PIN de conexión", pinSubtitle: "Introduce el PIN de 4 dígitos que se muestra en tu portátil",
+        language: "Idioma", theme: "Tema",
+        batteryLevel: "Batería",
+        all: "Todo",
+      },
+    };
+    let currentLanguage = localStorage.getItem("pk_language") || "en";
+    
+    function t(key) {
+      return TRANSLATIONS[currentLanguage]?.[key] || TRANSLATIONS.en[key] || key;
+    }
+    
+    // ── DOM ───────────────────────────────────────────────────────────────────────
+    const sentinelEl    = document.getElementById("sentinel-input");
+    const tapBtn        = document.getElementById("tap-to-type");
+    const liveDisplay   = document.getElementById("live-display");
+    const placeholder   = document.getElementById("preview-placeholder");
+    const cursorInfoEl  = document.getElementById("cursor-info");
+    const syncIndicator = document.getElementById("sync-indicator");
+    const statusBadge   = document.getElementById("status-badge");
+    const statusText    = document.getElementById("status-text");
+    const pinOverlay    = document.getElementById("pin-overlay");
+    const mainApp       = document.getElementById("main-app");
+    
+    // ── State ─────────────────────────────────────────────────────────────────────
+    let socket          = null;
+    let reconnectDelay  = RECONNECT_BASE_MS;
+    let reconnectTimer  = null;
+    let myDeviceId      = null;
+    let myDeviceName    = localStorage.getItem("pk_name") || "";
+    let myTabId         = sessionStorage.getItem("pk_tab_id") || crypto.randomUUID();
   let pinBuffer       = "";
   let mouseSpeedMult  = 1.0;
   let previewText     = "";
@@ -726,6 +830,7 @@
   let capsLock        = false;
   let _pendingPaste   = false;
   let WS_RESOLVED_URL = null;
+  let _reconnectAuthPayload = null;  // Cached auth payload for reconnection
 
   // ── Server config (fetched once from /api/config) ─────────────────────────────
   // Replaces the brittle server-side SESSION_PIN string injection.
@@ -751,12 +856,52 @@
     document.getElementById("theme-toggle").textContent = t === "dark" ? "🌙" : "☀️";
   })();
   
+  // ── Language ─────────────────────────────────────────────────────────────────
+  document.getElementById("language-select").value = currentLanguage;
+  
   function toggleTheme() {
     const cur = document.documentElement.getAttribute("data-theme") || "dark";
     const nxt = cur === "dark" ? "light" : "dark";
     document.documentElement.setAttribute("data-theme", nxt);
     document.getElementById("theme-toggle").textContent = nxt === "dark" ? "🌙" : "☀️";
     localStorage.setItem("pk_theme", nxt);
+  }
+  
+  function changeLanguage(lang) {
+    currentLanguage = lang;
+    localStorage.setItem("pk_language", lang);
+    // Update UI text
+    document.getElementById("status-text").textContent = t("connecting");
+    // Update tab labels
+    document.querySelector("[onclick=\"switchTab('keyboard')\"] .t-icon").nextSibling.textContent = t("keyboard");
+    document.querySelector("[onclick=\"switchTab('mouse')\"] .t-icon").nextSibling.textContent = t("mouse");
+    document.querySelector("[onclick=\"switchTab('clipboard')\"] .t-icon").nextSibling.textContent = t("clipboard");
+    document.querySelector("[onclick=\"switchTab('connection')\"] .t-icon").nextSibling.textContent = t("connection");
+    document.querySelector("[onclick=\"switchTab('settings')\"] .t-icon").nextSibling.textContent = t("settings");
+    // Update PIN overlay
+    document.getElementById("pin-title-text").textContent = t("enterPin");
+    document.getElementById("pin-sub-text").textContent = t("pinSubtitle");
+    // Update new UI elements (clipboard, file transfer)
+    const clipLabel = document.getElementById("clipboard-history-label");
+    if (clipLabel) clipLabel.textContent = t("clipboardHistory");
+    const emptyMsg = document.getElementById("clipboard-empty-msg");
+    if (emptyMsg) emptyMsg.textContent = t("clearHistory");
+    const fileLabel = document.getElementById("file-transfer-section-label");
+    if (fileLabel) fileLabel.textContent = t("fileTransfer");
+    const selectBtn = document.getElementById("select-file-btn");
+    if (selectBtn) selectBtn.textContent = t("dragDrop");
+  }
+  
+  function formatBattery(level) {
+    if (level === null || level === undefined || level === '') return '';
+    if (typeof level === 'string' && level === '…') return '🔋…';
+    const n = parseInt(level);
+    if (isNaN(n)) return '';
+    if (n >= 75) return '🔋';
+    if (n >= 50) return '🔋';
+    if (n >= 25) return '🔋';
+    if (n >= 10) return '🔋';
+    return '🪫';
   }
   
   // ── Tab Navigation ────────────────────────────────────────────────────────────
@@ -778,44 +923,84 @@
     socket.addEventListener("error",   () => socket.close());
   }
   
-  function onWsOpen() {
-    reconnectDelay = RECONNECT_BASE_MS;
-    setStatus("connecting", "Authenticating…");
-    clearTimeout(reconnectTimer);
-  
-    const storedPin = sessionStorage.getItem("pk_pin");
-    if (storedPin) {
-      // Reconnect path: re-authenticate with the cached PIN
-      sendPayload({ action: "pin_auth", pin: storedPin, tabId: myTabId });
-    } else if (!SESSION_PIN_REQUIRED) {
-      // No-PIN mode: skip the overlay and handshake immediately
-      sendPayload({ action: "hello", tabId: myTabId });
+    function onWsOpen() {
+      reconnectDelay = RECONNECT_BASE_MS;
+      setStatus("connecting", "Authenticating…");
+      clearTimeout(reconnectTimer);
+     
+      const storedPin = sessionStorage.getItem("pk_pin");
+      let authPayload;
+      if (storedPin) {
+        // Reconnect path: re-authenticate with the cached PIN
+        authPayload = { action: "pin_auth", pin: storedPin, tabId: myTabId };
+      } else if (!SESSION_PIN_REQUIRED) {
+        // No-PIN mode: skip the overlay and handshake immediately
+        authPayload = { action: "hello", tabId: myTabId };
+      }
+      // PIN required and no cached PIN: wait for user to enter via numpad
+      
+      // Include previous device_id for graceful reconnection if available
+      if (myDeviceId) {
+        authPayload.reconnect_device_id = myDeviceId;
+      }
+      
+      if (authPayload) {
+        _reconnectAuthPayload = authPayload;
+        sendPayload(authPayload);
+      }
+      
+      // Update clipboard section UI based on sync direction
+      updateClipboardSectionUI();
+      
+      // Request clipboard history after successful connection/authentication
+      // This will be sent after we receive auth_ok in onWsMessage
     }
-    // PIN required and no cached PIN: wait for user to enter via numpad
-  }
   
-  function onWsMessage(e) {
-    let msg;
-    try { msg = JSON.parse(e.data); } catch { return; }
-    switch (msg.type) {
-      case "auth_ok":
-        myDeviceId = msg.device_id;
-        setStatus("connected", "Connected ✓");
-        if (pinBuffer.length === 4) {
-          sessionStorage.setItem("pk_pin", pinBuffer);
-        }
-        pinBuffer = "";
-        showMainApp();
-        if (myDeviceName) {
-          sendPayload({ action: "device_name", name: myDeviceName, tabId: myTabId });
-          document.getElementById("my-name-input").value = myDeviceName;
-        }
-        break;
-      case "auth_fail":    handleAuthFail(msg.reason); break;
-      case "device_list":  renderDeviceList(msg.devices); break;
-      case "clipboard_ack": handleClipboardAck(msg.error); break;
+    function onWsMessage(e) {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+      switch (msg.type) {
+        case "auth_ok":
+          myDeviceId = msg.device_id;
+          setStatus("connected", "Connected ✓");
+          if (pinBuffer.length === 4) {
+            sessionStorage.setItem("pk_pin", pinBuffer);
+          }
+          pinBuffer = "";
+          showMainApp();
+          if (myDeviceName) {
+            sendPayload({ action: "device_name", name: myDeviceName, tabId: myTabId });
+            document.getElementById("my-name-input").value = myDeviceName;
+          }
+          // Request clipboard history after successful authentication
+          requestClipboardHistory();
+          break;
+        case "auth_fail":    handleAuthFail(msg.reason); break;
+        case "device_list":  renderDeviceList(msg.devices); break;
+        case "clipboard_ack": handleClipboardAck(msg.error); break;
+        case "clipboard_history": renderClipboardHistory(msg.history); break;
+        case "file_transfer_ack": handleFileTransferAck(msg); break;
+        case "laptop_clipboard_update":
+          // Handle laptop→phone clipboard sync
+          if (msg.text && msg.text.trim()) {
+            const text = msg.text.trim();
+            // Add to clipboard history (avoid duplicates)
+            if (!_CLIPBOARD_HISTORY.includes(text)) {
+              _CLIPBOARD_HISTORY.unshift(text);
+              // Keep only the most recent items
+              if (_CLIPBOARD_HISTORY.length > 10) {
+                _CLIPBOARD_HISTORY = _CLIPBOARD_HISTORY.slice(0, 10);
+              }
+            }
+            // Update the clipboard history display
+            renderClipboardHistory(_CLIPBOARD_HISTORY);
+            // Show notification
+            showClipSt("📋 Updated from laptop clipboard", "success");
+            setTimeout(() => showClipSt("",""), 2000);
+          }
+          break;
+      }
     }
-  }
   
   function onWsClose() {
     setStatus("disconnected", "Reconnecting…");
@@ -829,15 +1014,22 @@
       connect();
     }, reconnectDelay);
   }
+
+ // Update sendPayload to include reconnect_device_id when available
+ function sendPayload(p) {
+   if (socket && socket.readyState === WebSocket.OPEN) {
+     // Include device_id for graceful reconnection on relevant messages
+     if (myDeviceId && (p.action === "pin_auth" || p.action === "hello")) {
+       p.reconnect_device_id = myDeviceId;
+     }
+     socket.send(JSON.stringify(p));
+   }
+ }
   
-  function setStatus(state, label) {
-    statusBadge.className = state;
-    statusText.textContent = label;
-  }
-  
-  function sendPayload(p) {
-    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(p));
-  }
+ function setStatus(state, label) {
+   statusBadge.className = state;
+   statusText.textContent = label;
+ }
   
   // ── PIN ───────────────────────────────────────────────────────────────────────
   function showMainApp() {
@@ -1193,39 +1385,231 @@
   function mouseScroll(dx,dy)  { sendPayload({ action:"mouse_scroll", dx, dy }); }
   function updateSpeed(v)      { mouseSpeedMult=v/5; document.getElementById("speed-val").textContent=v; }
   
-  // ── Clipboard ─────────────────────────────────────────────────────────────────
-  function sendClipboard() {
-    const text = document.getElementById("clipboard-textarea").value.trim();
-    if (!text) { showClipSt("⚠️ Nothing to send","error"); return; }
-    document.getElementById("clipboard-send").disabled = true;
-    showClipSt("Sending…","");
-    sendPayload({ action:"clipboard_push", text });
-  }
-  
-  function sendClipboardThenPaste() {
-    const text = document.getElementById("clipboard-textarea").value.trim();
-    if (!text) { showClipSt("⚠️ Nothing to send","error"); return; }
-    document.getElementById("clipboard-send").disabled = true;
-    _pendingPaste = true;
-    showClipSt("Sending…","");
-    sendPayload({ action:"clipboard_push", text });
-  }
-  
-  function handleClipboardAck(error) {
-    document.getElementById("clipboard-send").disabled = false;
-    if (error) {
-      showClipSt(`❌ ${error}`, "error");
-    } else {
-      showClipSt("✅ Sent to laptop clipboard!", "success");
-      if (_pendingPaste) { _pendingPaste=false; setTimeout(() => sendCombo("Control","v"), 150); }
+    // ── Clipboard ─────────────────────────────────────────────────────────────────
+    function sendClipboard() {
+      const text = document.getElementById("clipboard-textarea").value.trim();
+      if (!text) { showClipSt("⚠️ Nothing to send","error"); return; }
+      // Check if we allow phone→laptop clipboard sync based on direction setting
+      const dir = window._CLIPBOARD_SYNC_DIRECTION || "phone_to_laptop";
+      if (dir !== "phone_to_laptop" && dir !== "bidirectional") {
+        showClipSt("❌ Clipboard sending from phone to laptop is disabled in current mode.", "error");
+        return;
+      }
+      document.getElementById("clipboard-send").disabled = true;
+      showClipSt("Sending…","");
+      sendPayload({ action:"clipboard_push", text });
     }
-    setTimeout(() => showClipSt("",""), 3000);
-  }
+   
+   function sendClipboardThenPaste() {
+     const text = document.getElementById("clipboard-textarea").value.trim();
+     if (!text) { showClipSt("⚠️ Nothing to send","error"); return; }
+     document.getElementById("clipboard-send").disabled = true;
+     _pendingPaste = true;
+     showClipSt("Sending…","");
+     sendPayload({ action:"clipboard_push", text });
+   }
+   
+   function handleClipboardAck(error) {
+     document.getElementById("clipboard-send").disabled = false;
+     if (error) {
+       showClipSt(`❌ ${error}`, "error");
+     } else {
+       showClipSt("✅ Sent to laptop clipboard!", "success");
+       if (_pendingPaste) { _pendingPaste=false; setTimeout(() => sendCombo("Control","v"), 150); }
+     }
+     setTimeout(() => showClipSt("",""), 3000);
+   }
+   
+   // ── File Transfer ────────────────────────────────────────────────────────
+   function sendFile() {
+     const fileInput = document.getElementById("file-input");
+     const file = fileInput.files[0];
+     
+     if (!file) {
+       showFileSt("⚠️ No file selected", "error");
+       return;
+     }
+     
+     processFileTransfer(file);
+   }
+   
+   function processFileTransfer(file) {
+     // Check file size (10MB limit)
+     if (file.size > 10 * 1024 * 1024) {
+       showFileSt("⚠️ File too large (max 10MB)", "error");
+       return;
+     }
+     
+     // Check file extension
+     const fileName = file.name;
+     const fileExt = "." + fileName.split(".").pop().toLowerCase();
+     const allowedExtensions = ['.txt', '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.json', '.csv', '.md', '.py', '.js', '.html', '.css'];
+     
+     if (!allowedExtensions.includes(fileExt)) {
+       showFileSt(`⚠️ File type not allowed. Allowed: ${allowedExtensions.join(', ')}`, "error");
+       return;
+     }
+     
+     showFileSt("📤 Reading file...", "");
+     document.getElementById("clipboard-send").disabled = true; // Reuse send button for file status
+     
+     const reader = new FileReader();
+     reader.onload = function(e) {
+       const base64Data = e.target.result.split(',')[1]; // Remove data URL prefix if present
+       
+       showFileSt("📤 Sending file...", "");
+       sendPayload({
+         action: "file_transfer",
+         file_name: fileName,
+         file_data: base64Data,
+         file_size: file.size
+       });
+     };
+     reader.onerror = function() {
+       showFileSt("❌ Error reading file", "error");
+       document.getElementById("clipboard-send").disabled = false;
+     };
+     reader.readAsDataURL(file);
+   }
+   
+   // Drag and drop file transfer
+   function setupFileDropZone() {
+     const dropZone = document.getElementById("file-drop-zone");
+     if (!dropZone) return;
+     
+     // Prevent default drag behaviors
+     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+       dropZone.addEventListener(eventName, preventDefaults, false);
+     });
+     
+     // Highlight drop zone when item is dragged over it
+     ['dragenter', 'dragover'].forEach(eventName => {
+       dropZone.addEventListener(eventName, () => dropZone.style.borderColor = 'var(--accent)', false);
+     });
+     
+     ['dragleave', 'drop'].forEach(eventName => {
+       dropZone.addEventListener(eventName, () => dropZone.style.borderColor = '', false);
+     });
+     
+     // Handle dropped files
+     dropZone.addEventListener('drop', handleDrop, false);
+   }
+   
+   function preventDefaults(e) {
+     e.preventDefault();
+     e.stopPropagation();
+   }
+   
+   function handleDrop(e) {
+     const dt = e.dataTransfer;
+     const files = dt.files;
+     
+     if (files.length) {
+       processFileTransfer(files[0]);
+     }
+   }
+   
+   function handleFileTransferAck(response) {
+     document.getElementById("clipboard-send").disabled = false;
+     const fileInput = document.getElementById("file-input");
+     fileInput.value = ""; // Reset file input
+     
+     if (response.error) {
+       showFileSt(`❌ ${response.error}`, "error");
+     } else if (response.success) {
+       showFileSt(`✅ ${response.message}`, "success");
+     } else {
+       showFileSt("✅ File received successfully", "success");
+     }
+     
+     setTimeout(() => showFileSt("",""), 3000);
+   }
+   
+   function showFileSt(msg, cls) {
+     const el = document.getElementById("file-status");
+     el.textContent = msg;
+     el.className = cls;
+   }
+   
+   function handleClipboardAck(error) {
+     document.getElementById("clipboard-send").disabled = false;
+     if (error) {
+       showClipSt(`❌ ${error}`, "error");
+     } else {
+       showClipSt("✅ Sent to laptop clipboard!", "success");
+       if (_pendingPaste) { _pendingPaste=false; setTimeout(() => sendCombo("Control","v"), 150); }
+     }
+     setTimeout(() => showClipSt("",""), 3000);
+   }
   
-  function showClipSt(msg, cls) {
-    const el = document.getElementById("clipboard-status");
-    el.textContent=msg; el.className=cls;
-  }
+   function showClipSt(msg, cls) {
+     const el = document.getElementById("clipboard-status");
+     el.textContent=msg; el.className=cls;
+   }
+
+   // ── Clipboard Direction UI Updates ─────────────────────────────────────
+   function updateClipboardSectionUI() {
+     const direction = window._CLIPBOARD_SYNC_DIRECTION || "phone_to_laptop";
+     const sectionLabel = document.getElementById("clipboard-section-label");
+     const sectionDescription = document.getElementById("clipboard-section-description");
+     
+     if (direction === "phone_to_laptop") {
+       sectionLabel.textContent = "Phone → Laptop Clipboard";
+       sectionDescription.textContent = "Type or paste below → send to laptop clipboard → press Ctrl+V on laptop.";
+     } else if (direction === "laptop_to_phone") {
+       sectionLabel.textContent = "Laptop → Phone Clipboard";
+       sectionDescription.textContent = "Laptop clipboard changes will appear here → tap to copy to phone.";
+     } else if (direction === "bidirectional") {
+       sectionLabel.textContent = "Bidirectional Clipboard Sync";
+       sectionDescription.textContent = "Clipboard syncs both ways: phone↔laptop. Changes appear in both directions.";
+     }
+   }
+   
+   // ── Clipboard History ────────────────────────────────────────────────────────
+   function requestClipboardHistory() {
+     sendPayload({ action: "clipboard_history" });
+   }
+   
+   function renderClipboardHistory(history) {
+     const listEl = document.getElementById("clipboard-history-list");
+     if (!history || history.length === 0) {
+       listEl.innerHTML = `<div style="font-size:.83rem;color:var(--text-dim);text-align:center;padding:10px;">${t("clearHistory")}</div>`;
+       return;
+     }
+     
+     listEl.innerHTML = history.map((item, index) => {
+       // Truncate long items for display
+       const displayText = item.length > 50 ? item.substring(0, 50) + "..." : item;
+       return `<div class="history-item" onclick="useClipboardHistory(${index})" style="padding:8px; margin:4px 0; background:var(--surface); border-radius:var(--radius-sm); border:1px solid var(--border); cursor:pointer;">
+         ${escapeHtml(displayText)}
+       </div>`;
+     }).join("");
+   }
+   
+    function useClipboardHistory(index) {
+      // Check if we allow phone→laptop clipboard sync based on direction setting
+      const dir = window._CLIPBOARD_SYNC_DIRECTION || "phone_to_laptop";
+      if (dir !== "phone_to_laptop" && dir !== "bidirectional") {
+        showClipSt("❌ Clipboard history usage is disabled in current mode.", "error");
+        return;
+      }
+      // Send the selected history item to clipboard
+      sendPayload({ action: "clipboard_push", text: _CLIPBOARD_HISTORY[index] });
+      showClipSt("📋 Sent from history!", "success");
+      setTimeout(() => showClipSt("",""), 1500);
+    }
+   
+   function escapeHtml(text) {
+     const map = {
+       '&': '&amp;',
+       '<': '&lt;',
+       '>': '&gt;',
+       '"': '&quot;',
+       "'": '&#039;'
+     };
+     
+     return text.replace(/[&<>"']/g, m => map[m]);
+   }
   
   // ── Device List ───────────────────────────────────────────────────────────────
   function renderDeviceList(devices) {
@@ -1236,11 +1620,12 @@
     }
     list.innerHTML = devices.map(d => {
       const isMe = d.id === myDeviceId;
+      const battery = d.battery != null ? d.battery : (isMe ? (navigator.getBattery ? '…' : '') : '');
       return `<div class="device-card ${isMe?"is-me":""}">
         <div class="d-avatar">${esc(d.name||"?").charAt(0).toUpperCase()}</div>
         <div class="d-info">
           <div class="d-name">${esc(d.name||"Unknown")}</div>
-          <div class="d-sub">${isMe?"📍 This device":"📱 Connected"}</div>
+          <div class="d-sub">${isMe?"📍 This device":"📱 Connected"}${battery ? ' <span class="d-battery">' + formatBattery(battery) + '</span>' : ''}</div>
         </div>
         ${isMe?'<span style="color:var(--accent);font-size:.72rem;font-weight:700;">YOU</span>':""}
       </div>`;
@@ -1281,41 +1666,66 @@
     }
   });
   
-  // ── Boot — fetch config then connect ──────────────────────────────────────
-  // Fetches /api/config first so the PIN overlay decision is data-driven,
-  async function boot() {
-    if (myDeviceName) document.getElementById("my-name-input").value = myDeviceName;
-    renderPreview();
+   // ── Boot — fetch config then connect ──────────────────────────────────────
+   // Fetches /api/config first so the PIN overlay decision is data-driven,
+   async function boot() {
+     if (myDeviceName) document.getElementById("my-name-input").value = myDeviceName;
+     renderPreview();
+   
+      // 1. Fetch server config — determines PIN requirement AND WebSocket URL
+      let wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${WS_PORT}`;
   
-    // 1. Fetch server config — determines PIN requirement AND WebSocket URL
-    let wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${WS_PORT}`;
-
-    try {
-      const res = await fetch("/api/config", { cache: "no-store" });
-      if (res.ok) {
-        const cfg = await res.json();
-        SESSION_PIN_REQUIRED = Boolean(cfg.pin_required);
-
-        // When server provides an override WS URL (tunnel mode),
-        // use it — otherwise fall back to the default LAN calculation
-        if (cfg.ws_url) {
-          wsUrl = cfg.ws_url;
-          console.log("[PhoneKey] Using tunnel WS URL:", wsUrl);
+      try {
+        const res = await fetch("/api/config", { cache: "no-store" });
+        if (res.ok) {
+          const cfg = await res.json();
+          SESSION_PIN_REQUIRED = Boolean(cfg.pin_required);
+          // Update WS_PORT from server config (in case it was changed via CLI)
+          if (cfg.ws_port) {
+            WS_PORT = cfg.ws_port;
+            wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${WS_PORT}`;
+          }
+  
+          // When server provides an override WS URL (tunnel mode),
+          // use it — otherwise fall back to the default LAN calculation
+          if (cfg.ws_url) {
+            wsUrl = cfg.ws_url;
+            console.log("[PhoneKey] Using tunnel WS URL:", wsUrl);
+          }
+          
+          // Store clipboard sync direction for UI adaptation
+          window._CLIPBOARD_SYNC_DIRECTION = cfg.clipboard_sync_direction || "phone_to_laptop";
+          
+          // Store reconnection settings from server (for exponential backoff)
+          if (cfg.reconnect) {
+            RECONNECT_BASE_MS = cfg.reconnect.base_delay_ms || RECONNECT_BASE_MS;
+            RECONNECT_MAX_MS = cfg.reconnect.max_delay_ms || RECONNECT_MAX_MS;
+            RECONNECT_FACTOR = cfg.reconnect.backoff_factor || RECONNECT_FACTOR;
+            // Note: grace_seconds is server-side only; client uses its own timer
+          }
         }
+      } catch {
+        SESSION_PIN_REQUIRED = true;   // safe default
+        window._CLIPBOARD_SYNC_DIRECTION = "phone_to_laptop"; // fallback
       }
-    } catch {
-      SESSION_PIN_REQUIRED = true;   // safe default
-    }
-  
-    // 2. Hide PIN overlay immediately if not required
-    if (!SESSION_PIN_REQUIRED) {
-      pinOverlay.classList.add("hidden");
-      mainApp.style.display = "block";   // show app shell immediately
-    }
-  
-    // 3. Open WebSocket with the resolved URL
-    connectTo(wsUrl);
-  }
+    
+     // 2. Hide PIN overlay immediately if not required
+     if (!SESSION_PIN_REQUIRED) {
+       pinOverlay.classList.add("hidden");
+       mainApp.style.display = "block";   // show app shell immediately
+     }
+   
+     // 3. Open WebSocket with the resolved URL
+     connectTo(wsUrl);
+     
+     // 4. Request clipboard history after connection is established
+     // (will be handled in onWsMessage when we get the response)
+     // Note: We don't call requestClipboardHistory() here because we need to wait for connection
+     // It will be called automatically when the WebSocket opens in onWsOpen
+     
+     // 5. Setup drag-and-drop file transfer
+     setupFileDropZone();
+   }
 
   // ── WebSocket — accepts explicit URL ──────────────────────────────────────
   function connectTo(url) {

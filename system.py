@@ -5,7 +5,7 @@ Contract : Interactive startup configuration, CLI argument parsing,
            All server logic lives in server.py.
 """
 
-__version__ = "3.1.0"
+__version__ = "3.2.0"
 
 import argparse
 import asyncio
@@ -80,6 +80,8 @@ Examples:
                         help="Disable 4-digit PIN authentication")
     parser.add_argument("--mouse-speed",type=float, default=None, metavar="MULT",
                         help="Mouse speed multiplier 0.1–5.0 (default: 1.0)")
+    parser.add_argument("--clipboard-sync-direction", type=str, default=None, choices=["phone_to_laptop", "laptop_to_phone", "bidirectional"],
+                        help="Clipboard synchronization direction: phone_to_laptop (phone→laptop only), laptop_to_phone (laptop→phone only), or bidirectional (both directions) (default: phone_to_laptop)")
     parser.add_argument("--tunnel",     action="store_true", default=None,
                         help="Enable Cloudflare Quick Tunnel (cross-network, no cert warning)")
     parser.add_argument("--log-level",  default="INFO",
@@ -187,6 +189,31 @@ def _interactive_setup(args: argparse.Namespace) -> argparse.Namespace:
     else:
         print(f"  Mouse speed: {args.mouse_speed}  (from CLI flags)")
 
+    # ── Clipboard Sync Direction ──────────────────────────────────────────
+    if args.clipboard_sync_direction is None:
+        try:
+            print("  Clipboard sync direction:")
+            print("    [1] Phone → Laptop (phone copies to laptop only)")
+            print("    [2] Laptop → Phone (laptop copies to phone only)")
+            print("    [3] Bidirectional (both directions)")
+            while True:
+                direction_input = input("  Direction [1/2/3, Enter=1] → ").strip() or "1"
+                if direction_input == "1":
+                    args.clipboard_sync_direction = "phone_to_laptop"
+                    break
+                elif direction_input == "2":
+                    args.clipboard_sync_direction = "laptop_to_phone"
+                    break
+                elif direction_input == "3":
+                    args.clipboard_sync_direction = "bidirectional"
+                    break
+                else:
+                    print("  Invalid choice, please enter 1, 2, or 3.")
+        except (EOFError, KeyboardInterrupt):
+            args.clipboard_sync_direction = "phone_to_laptop"
+    else:
+        print(f"  Clipboard sync direction: {args.clipboard_sync_direction}  (from CLI flags)")
+
     print()
 
     # ── Ports (advanced — only shown if not already set) ──────────────────
@@ -279,17 +306,22 @@ def release_instance_lock() -> None:
 if __name__ == "__main__":
     args = parse_args()
 
-    # 1. Apply defaults for any flags still None (--yes path or partial flags)
+    # 1. Interactive setup (skipped if --yes or all flags explicit)
+    #    _interactive_setup() handles: tunnel, https, no_pin, mouse_speed,
+    #    clipboard_sync_direction, and sets defaults on error/EOF
+    if _needs_interactive(args):
+        args = _interactive_setup(args)
+
+    # 2. Apply defaults for any flags still None (--yes path or partial flags)
+    #    This handles flags not covered by _interactive_setup (ws_port, http_port)
+    #    and provides safety net for all flags
     if args.ws_port    is None: args.ws_port    = _DEFAULT_WS_PORT
     if args.http_port  is None: args.http_port  = _DEFAULT_HTTP_PORT
     if args.https      is None: args.https      = False
     if args.no_pin     is None: args.no_pin     = False
     if args.mouse_speed is None: args.mouse_speed = 1.0
     if args.tunnel     is None: args.tunnel     = False
-
-    # 2. Interactive setup (skipped if --yes or all flags explicit)
-    if _needs_interactive(args):
-        args = _interactive_setup(args)
+    if args.clipboard_sync_direction is None: args.clipboard_sync_direction = "phone_to_laptop"
 
     # 3. Logging must be ready before server.py is imported
     log = setup_logging(level=args.log_level)

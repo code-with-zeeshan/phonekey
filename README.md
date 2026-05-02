@@ -19,8 +19,13 @@ and clipboard bridge. No Bluetooth pairing, no app store, no cloud account.
 |---|---|
 | ⌨️ Full keyboard | All keys, modifiers (Shift/Ctrl/Alt), function keys F1–F12 |
 | 🖱️ Mouse trackpad | Move, click, right-click, scroll, double-click with touch gestures |
-| 📋 Clipboard sync | Type on phone → paste on laptop with one tap |
-| 🔐 PIN security | 4-digit PIN prevents unauthorised connections |
+| 📋 Clipboard sync | Type on phone → paste on laptop with one tap; bidirectional sync option |
+| 📋 Clipboard history | Access recent clipboard items; persistent across restarts |
+| 📎 File transfer | Send files from phone to laptop (up to 10MB, multiple formats) |
+| 🎮 Macro recording | Record and playback keyboard/mouse sequences per device |
+| 🖐️ Gesture commands | Touch gestures for window management (alt-tab, show desktop, etc.) |
+| 🌐 Multi-language | English, 中文, Español UI support |
+| � PIN security | 4-digit PIN prevents unauthorised connections |
 | 🌐 Tunnel mode | Cloudflare Quick Tunnel — works across different networks |
 | 🔒 HTTPS/WSS | Self-signed certificate for encrypted local connections |
 | 📱 Multi-device | Multiple phones can connect simultaneously |
@@ -146,6 +151,7 @@ Options:
   --no-pin             Disable PIN auth
   --tunnel             Enable Cloudflare tunnel
   --mouse-speed MULT   Mouse speed 0.1–5.0     (default: 1.0)
+  --clipboard-sync-direction MODE  Clipboard sync: phone_to_laptop (default), laptop_to_phone, or bidirectional
   --log-level  LEVEL   DEBUG/INFO/WARNING/ERROR (default: INFO)
   --yes / -y           Skip interactive setup, use defaults
 ```
@@ -156,6 +162,7 @@ python system.py --yes                      # defaults, no prompts
 python system.py --no-pin --mouse-speed 2   # fast mouse, no PIN
 python system.py --tunnel --no-pin          # cross-network, no PIN
 python system.py --ws-port 9000 --http-port 9001  # custom ports
+python system.py --clipboard-sync-direction bidirectional  # sync both ways
 ```
 
 ### Environment Variables
@@ -177,7 +184,10 @@ After scanning the QR code, your phone browser shows:
 |---|---|
 | ⌨️ Keyboard | Live preview, quick keys, modifier keys, function keys |
 | 🖱️ Mouse | Trackpad, click buttons, scroll, speed slider |
-| 📋 Clipboard | Send text to laptop clipboard; Send+Paste in one tap |
+| 📋 Clipboard | Send text to laptop; clipboard history; file transfer |
+| 🎮 Macros | Record and playback keyboard/mouse sequences |
+| 🖐️ Gestures | Configure touch gestures for window management |
+| 🌐 Language | Switch UI language (EN/中文/ES) |
 | 📱 Devices | See connected devices, set your device name |
 
 ---
