@@ -43,15 +43,26 @@ class TunnelManager:
     # ── Binary discovery ──────────────────────────────────────────────────
 
     def find_binary(self) -> Optional[Path]:
-        """Search CWD → bin/ → PATH for cloudflared."""
-        for candidate in (
-            Path.cwd() / CLOUDFLARED_BIN_NAME,
-            Path(__file__).parent / "bin" / CLOUDFLARED_BIN_NAME,
-        ):
-            if candidate.is_file() and os.access(candidate, os.X_OK):
-                logger.debug("Found cloudflared: %s", candidate)
-                return candidate
+        """Search CWD → bin/ → PATH for cloudflared (any platform variant)."""
+        bin_dir = Path(__file__).parent / "bin"
 
+        # Build list of names to search: bare name + platform-specific name
+        platform_name = self.get_platform_specific_name()  # e.g. cloudflared-windows-amd64.exe
+        search_names  = list(dict.fromkeys([           # preserve order, deduplicate
+            CLOUDFLARED_BIN_NAME,                      # "cloudflared"
+            platform_name,                             # "cloudflared-windows-amd64.exe"
+            CLOUDFLARED_BIN_NAME + ".exe",             # "cloudflared.exe" (Windows fallback)
+        ]))
+
+        # Search CWD and bin/ for each candidate name
+        for name in search_names:
+            for directory in (Path.cwd(), bin_dir):
+                candidate = directory / name
+                if candidate.is_file() and os.access(candidate, os.X_OK):
+                    logger.debug("Found cloudflared: %s", candidate)
+                    return candidate
+
+        # Search PATH
         found = shutil.which(CLOUDFLARED_BIN_NAME)
         if found:
             p = Path(found)

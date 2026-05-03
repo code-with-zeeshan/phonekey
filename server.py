@@ -1592,7 +1592,7 @@ class PhoneKeyHTTPHandler(BaseHTTPRequestHandler):
                 # When tunnel is active, client must use wss://tunnel-host (not LAN IP)
                 # When None, client uses its default WS_URL calculation
                 "ws_url":        _WS_URL_OVERRIDE,
-                "ws_port":       _WS_PORT,
+                "ws_port":       _HTTP_PORT,    # WS is now on same port as HTTP
                 # Clipboard sync direction for client UI adaptation
                 "clipboard_sync_direction": _CLIPBOARD_SYNC_DIRECTION,
                 # Reconnection settings for exponential backoff and graceful reconnection
@@ -1678,6 +1678,74 @@ def start_http_server(ssl_ctx: ssl.SSLContext | None) -> None:
     proto = "HTTPS" if ssl_ctx else "HTTP"
     logger.info("🌐 %s server → port %d", proto, _HTTP_PORT)
     httpd.serve_forever()
+
+# ─────────────────────────────────────────────
+#  Combined HTTP+WS request handler (process_request)
+# ─────────────────────────────────────────────
+
+async def _http_process_request(path, request_headers):
+    """
+    Called by websockets for EVERY incoming request before the WS handshake.
+    If the request has no 'Upgrade: websocket' header, we serve it as HTTP.
+    If it does have the header, return None → websockets does the WS upgrade.
+    """
+    from http import HTTPStatus
+
+    # WebSocket upgrade requests — let websockets handle them
+    upgrade = request.headers.get("Upgrade", "")
+    if upgrade.lower() == "websocket":
+        return None   # ← proceed to ws_handler normally
+
+    clean_path = path.split("?")[0]
+
+    # ── /api/config ──────────────────────────────────────────────────────
+    if clean_path == "/api/config":
+        payload = json.dumps({
+            "pin_required":             _SESSION_PIN is not None,
+            "version":                  __version__,
+            "ws_url":                   _WS_URL_OVERRIDE,
+            "ws_port":                  _HTTP_PORT,    # WS is now on same port as HTTP
+            "clipboard_sync_direction": _CLIPBOARD_SYNC_DIRECTION,
+            "reconnect": {
+                "grace_seconds":    _RECONNECT_GRACE_SECONDS,
+                "base_delay_ms":    _RECONNECT_BASE_DELAY_MS,
+                "max_delay_ms":     _RECONNECT_MAX_DELAY_MS,
+                "backoff_factor":   _RECONNECT_BACKOFF_FACTOR,
+            },
+        }).encode("utf-8")
+        return (HTTPStatus.OK, [
+            ("Content-Type",   "application/json"),
+            ("Content-Length", str(len(payload))),
+            ("Cache-Control",  "no-cache"),
+        ], payload)
+
+    # ── / → redirect to /index.html ──────────────────────────────────────
+    if clean_path == "/":
+        return (HTTPStatus.MOVED_PERMANENTLY, [("Location", "/index.html")], b"")
+
+    # ── Static files from CLIENT_DIR ─────────────────────────────────────
+    file_path = CLIENT_DIR / (clean_path.lstrip("/") or "index.html")
+    if not file_path.exists() or not file_path.is_file():
+        file_path = CLIENT_DIR / "index.html"   # SPA fallback
+    if not file_path.exists():
+        return (HTTPStatus.NOT_FOUND, [], b"Not Found")
+
+    suffix   = file_path.suffix.lower()
+    mime_map = {
+        ".html": "text/html; charset=utf-8",
+        ".css":  "text/css",
+        ".js":   "application/javascript",
+        ".ico":  "image/x-icon",
+        ".png":  "image/png",
+        ".svg":  "image/svg+xml"
+    }
+    mime    = mime_map.get(suffix, "application/octet-stream")
+    content = file_path.read_bytes()
+    return (HTTPStatus.OK, [
+        ("Content-Type",   mime),
+        ("Content-Length", str(len(content))),
+        ("Cache-Control",  "no-cache"),
+    ], content)
 
 # ─────────────────────────────────────────────
 #  SSL
@@ -2043,30 +2111,25 @@ async def main(args: Namespace) -> None:
         if not TUNNEL_AVAILABLE:
             logger.error("❌  --tunnel requested but tunnel_manager module not found.")
             sys.exit(1)
-        # HTTP must be up before tunnel can proxy it
-        threading.Thread(target=start_http_server, args=(ssl_ctx,), daemon=True).start()
-        import time
-        time.sleep(2)
+        # Start tunnel — no need to pre-start HTTP server, websockets handles HTTP    
         tunnel_manager = TunnelManager(_HTTP_PORT)
         tunnel_url     = tunnel_manager.start()
         if tunnel_url:
             _TUNNEL_URL = tunnel_url
-            # WebSocket also goes through the tunnel via wss://
-            # Cloudflare tunnels support WS — strip https:// and use wss://
-            tunnel_host      = tunnel_url.replace("https://", "").replace("http://", "")
-            _WS_URL_OVERRIDE = f"wss://{tunnel_host}"
+            # For tunnel, WS goes through the same tunnel host on port 443 (standard HTTPS)
+            # No port number needed — Cloudflare terminates at 443
+            tunnel_host      = tunnel_url.replace("https://", "").replace("http://", "").rstrip("/")
+            _WS_URL_OVERRIDE = f"wss://{tunnel_host}"   # port 443 implicit 
             logger.info("🌐 Tunnel URL: %s", tunnel_url)
             logger.info("🔌 WS via tunnel: %s", _WS_URL_OVERRIDE)
         else:
             logger.warning("⚠️  Tunnel failed — serving on local URL.")
-    else:
-        threading.Thread(target=start_http_server, args=(ssl_ctx,), daemon=True).start()
 
     # ── Banner ────────────────────────────────────────────────────────────
     print_banner(local_ip, ssl_ctx, tunnel_url)
     ws_proto = "wss" if (ssl_ctx or tunnel_url) else "ws"
     print_qr_and_url(_TUNNEL_URL or f"{'https' if ssl_ctx else 'http'}://{local_ip}:{_HTTP_PORT}")
-    logger.info("🔌 WebSocket (%s) → port %d", ws_proto.upper(), _WS_PORT)
+    logger.info("🔌 WebSocket (%s) + HTTP → port %d", ws_proto.upper(), _HTTP_PORT)
 
     # ── Event loop + signals ──────────────────────────────────────────────
     stop_event = asyncio.Event()
@@ -2106,10 +2169,11 @@ async def main(args: Namespace) -> None:
     async with websockets.serve(
         ws_handler,
         "0.0.0.0",
-        _WS_PORT,
+        _HTTP_PORT,                         # HTTP port (8080) — single port for everything
         ssl=ssl_ctx,
         ping_interval=WS_PING_INTERVAL,
         ping_timeout=WS_PING_TIMEOUT,
+        process_request=_http_process_request,  # Serve HTTP files + /api/config
     ):
         logger.info("✅ Server ready — waiting for phone connection…")
         await stop_event.wait()
