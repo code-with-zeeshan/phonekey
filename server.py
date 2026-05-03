@@ -1681,81 +1681,93 @@ def start_http_server(ssl_ctx: ssl.SSLContext | None) -> None:
 
 # ─────────────────────────────────────────────
 #  Combined HTTP+WS request handler (process_request)
+#  Dual-API: works with BOTH websockets legacy (path, headers)
+#            AND websockets 12.x new (connection, request) signatures.
+#  The Cloudflare tunnel path routes through websockets.legacy.server,
+#  while direct local connections may use the new server — so we must
+#  detect which API is active at call time.
 # ─────────────────────────────────────────────
 
-async def _http_process_request(connection,  request,):
+async def _http_process_request(*args):
     """
-    Called by websockets for EVERY incoming request before the WS handshake.
-    If the request has no 'Upgrade: websocket' header, we serve it as HTTP.
-    If it does have the header, return None → websockets does the WS upgrade.
+    Handles both websockets API variants transparently:
+
+    Legacy API  →  process_request(path: str, request_headers: Headers)
+    New 12.x    →  process_request(connection, request)
+                   where request has .path and .headers attributes
+
+    Detection:  if args[0] is a plain str  → legacy
+                otherwise                  → new 12.x
     """
     from http import HTTPStatus
 
-    # WebSocket upgrade requests — let websockets handle them
-    upgrade = request.headers.get("Upgrade", "")
-    if upgrade.lower() == "websocket":
-        return None   # ← proceed to ws_handler normally
+    # ── 1. Detect API variant and normalise to (path, headers) ───────────
+    if isinstance(args[0], str):
+        # ── Legacy API: (path: str, request_headers: Headers) ─────────────
+        path            = args[0]
+        request_headers = args[1]        # already a Headers-like object
+        _legacy         = True
+    else:
+        # ── New 12.x API: (connection, request) ───────────────────────────
+        request         = args[1]
+        path            = request.path
+        request_headers = request.headers
+        _legacy         = False
 
-    path = request.path
+    # ── 2. WebSocket upgrade → let websockets handle the handshake ────────
+    upgrade = request_headers.get("Upgrade", "")
+    if upgrade.lower() == "websocket":
+        return None
+
     clean_path = path.split("?")[0]
 
-    # ── Build response helper (works for websockets 12.x) ────────────────
-    try:
-        from websockets.http11 import Response
-    except ImportError:                         # fallback for older installs
-        from websockets.datastructures import Headers as _H
+    # ── 3. Build response body ────────────────────────────────────────────
 
-        class Response:                         # minimal shim
-            def __init__(self, status, headers, body):
-                self.status_code = status
-                self.headers     = _H(headers)
-                self.body        = body
-
-    def _make_response(status, headers_list, body: bytes):
-        try:
-            from websockets.datastructures import Headers
-            return Response(status, Headers(headers_list), body)
-        except Exception:
-            return Response(status, headers_list, body)
-
-    # ── /api/config ──────────────────────────────────────────────────────
+    # /api/config
     if clean_path == "/api/config":
-        payload = json.dumps({
+        body = json.dumps({
             "pin_required":             _SESSION_PIN is not None,
             "version":                  __version__,
             "ws_url":                   _WS_URL_OVERRIDE,
-            "ws_port":                  _HTTP_PORT,    # WS is now on same port as HTTP
+            "ws_port":                  _HTTP_PORT,
             "clipboard_sync_direction": _CLIPBOARD_SYNC_DIRECTION,
             "reconnect": {
-                "grace_seconds":    _RECONNECT_GRACE_SECONDS,
-                "base_delay_ms":    _RECONNECT_BASE_DELAY_MS,
-                "max_delay_ms":     _RECONNECT_MAX_DELAY_MS,
-                "backoff_factor":   _RECONNECT_BACKOFF_FACTOR,
+                "grace_seconds":  _RECONNECT_GRACE_SECONDS,
+                "base_delay_ms":  _RECONNECT_BASE_DELAY_MS,
+                "max_delay_ms":   _RECONNECT_MAX_DELAY_MS,
+                "backoff_factor": _RECONNECT_BACKOFF_FACTOR,
             },
         }).encode("utf-8")
-        return _make_response(
+        return _make_ws_response(
             HTTPStatus.OK,
             [("Content-Type",   "application/json"),
-             ("Content-Length", str(len(payload))),
+             ("Content-Length", str(len(body))),
              ("Cache-Control",  "no-cache")],
-            payload,
+            body,
+            _legacy,
         )
 
-    # ── / → redirect to /index.html ──────────────────────────────────────
+    # / → redirect
     if clean_path == "/":
-        return _make_response(
+        return _make_ws_response(
             HTTPStatus.MOVED_PERMANENTLY,
             [("Location", "/index.html")],
             b"",
+            _legacy,
         )
 
-    # ── Static files from CLIENT_DIR ─────────────────────────────────────
-    rel = clean_path.lstrip("/") or "index.html"
+    # Static files
+    rel       = clean_path.lstrip("/") or "index.html"
     file_path = CLIENT_DIR / rel
     if not file_path.exists() or not file_path.is_file():
         file_path = CLIENT_DIR / "index.html"   # SPA fallback
     if not file_path.exists():
-        return _make_response(HTTPStatus.NOT_FOUND, [], b"Not Found")
+        return _make_ws_response(
+            HTTPStatus.NOT_FOUND,
+            [("Content-Type", "text/plain")],
+            b"Not Found",
+            _legacy,
+        )
 
     suffix   = file_path.suffix.lower()
     mime_map = {
@@ -1764,17 +1776,39 @@ async def _http_process_request(connection,  request,):
         ".js":   "application/javascript",
         ".ico":  "image/x-icon",
         ".png":  "image/png",
-        ".svg":  "image/svg+xml"
+        ".svg":  "image/svg+xml",
     }
     mime    = mime_map.get(suffix, "application/octet-stream")
     content = file_path.read_bytes()
-    return _make_response(
+    return _make_ws_response(
         HTTPStatus.OK,
         [("Content-Type",   mime),
          ("Content-Length", str(len(content))),
          ("Cache-Control",  "no-cache")],
         content,
+        _legacy,
     )
+
+
+def _make_ws_response(status, headers_list: list, body: bytes, legacy: bool):
+    """
+    Return the correct response object for the active websockets API.
+
+    Legacy path  → plain (status, headers_list, body) tuple
+    New 12.x     → websockets.http11.Response  (or datastructures shim)
+    """
+    if legacy:
+        # websockets legacy server accepts a raw tuple
+        return (status, headers_list, body)
+
+    # New 12.x server requires a Response object
+    try:
+        from websockets.http11 import Response
+        from websockets.datastructures import Headers
+        return Response(status, Headers(headers_list), body)
+    except ImportError:
+        # Absolute fallback: return legacy tuple (websockets will usually accept it)
+        return (status, headers_list, body)
 
 # ─────────────────────────────────────────────
 #  SSL
