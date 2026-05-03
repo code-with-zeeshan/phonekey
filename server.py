@@ -553,7 +553,7 @@ def _check_rate_limit(client_addr: tuple[str, int]) -> bool:
 
 def _store_disconnected_state(device_id: str, name: str, tab_id: str | None, authed: bool) -> None:
     """Store device auth state temporarily after disconnect to allow reconnection."""
-    with _grace_lock:
+    with _GRACE_LOCK:
         _DISCONNECTED_DEVICE_STATE[device_id] = {
             "name": name,
             "tab_id": tab_id,
@@ -564,7 +564,7 @@ def _store_disconnected_state(device_id: str, name: str, tab_id: str | None, aut
 
 def _get_and_consume_disconnected_state(device_id: str) -> dict | None:
     """Retrieve and remove stored state for a reconnecting device. Returns None if expired or not found."""
-    with _grace_lock:
+    with _GRACE_LOCK:
         state = _DISCONNECTED_DEVICE_STATE.pop(device_id, None)
         if state is None:
             return None
@@ -576,7 +576,7 @@ def _get_and_consume_disconnected_state(device_id: str) -> dict | None:
 def _cleanup_expired_grace_states() -> None:
     """Remove expired entries from the grace period cache."""
     now = datetime.now(timezone.utc).timestamp()
-    with _grace_lock:
+    with _GRACE_LOCK:
         expired = [k for k, v in _DISCONNECTED_DEVICE_STATE.items() if v["expires_at"] <= now]
         for k in expired:
             _DISCONNECTED_DEVICE_STATE.pop(k, None)
@@ -1239,6 +1239,9 @@ async def ws_handler(websocket: websockets.WebSocketServerProtocol) -> None:
 
         if action == "hello":
             if _SESSION_PIN is not None:
+                await websocket.send(json.dumps({"type": "auth_fail", "reason": "pin_required"}))
+                # Small delay to ensure auth_fail is received before closing
+                await asyncio.sleep(0.1)
                 await websocket.close(1008, "pin_required")
                 return
             
@@ -1264,6 +1267,9 @@ async def ws_handler(websocket: websockets.WebSocketServerProtocol) -> None:
                         tab_id=tab_id,
                     )
                     if not _try_register_device(device, tab_id, client_addr):
+                        await websocket.send(json.dumps({"type": "auth_fail", "reason": "duplicate_tab"}))
+                        # Small delay to ensure auth_fail is received before closing
+                        await asyncio.sleep(0.1)
                         await websocket.close(1008, "duplicate_tab")
                         device = None
                         return
@@ -1278,6 +1284,9 @@ async def ws_handler(websocket: websockets.WebSocketServerProtocol) -> None:
                     tab_id=tab_id,
                 )
                 if not _try_register_device(device, tab_id, client_addr):
+                    await websocket.send(json.dumps({"type": "auth_fail", "reason": "duplicate_tab"}))
+                    # Small delay to ensure auth_fail is received before closing
+                    await asyncio.sleep(0.1)
                     await websocket.close(1008, "duplicate_tab")
                     device = None
                     return
@@ -1285,11 +1294,16 @@ async def ws_handler(websocket: websockets.WebSocketServerProtocol) -> None:
 
         elif action == "pin_auth":
             if _SESSION_PIN is None:
+                await websocket.send(json.dumps({"type": "auth_fail", "reason": "pin_not_required"}))
+                # Small delay to ensure auth_fail is received before closing
+                await asyncio.sleep(0.1)
                 await websocket.close(1008, "pin_not_required")
                 return
             if msg.get("pin", "") != _SESSION_PIN:
                 ws_log.warning("🔒 Wrong PIN from %s", client_addr)
                 await websocket.send(json.dumps({"type": "auth_fail", "reason": "wrong_pin"}))
+                # Small delay to ensure auth_fail is received before closing
+                await asyncio.sleep(0.1)
                 await websocket.close(1008, "wrong_pin")
                 return
             
@@ -1314,6 +1328,9 @@ async def ws_handler(websocket: websockets.WebSocketServerProtocol) -> None:
                         tab_id=tab_id,
                     )
                     if not _try_register_device(device, tab_id, client_addr):
+                        await websocket.send(json.dumps({"type": "auth_fail", "reason": "duplicate_tab"}))
+                        # Small delay to ensure auth_fail is received before closing
+                        await asyncio.sleep(0.1)
                         await websocket.close(1008, "duplicate_tab")
                         device = None
                         return
@@ -1334,6 +1351,9 @@ async def ws_handler(websocket: websockets.WebSocketServerProtocol) -> None:
                 ws_log.info("🔓 PIN verified: %s (id=%s tabId=%s)", client_addr, device_id[:8], tab_id)
 
         else:
+            await websocket.send(json.dumps({"type": "auth_fail", "reason": "expected_auth"}))
+            # Small delay to ensure auth_fail is received before closing
+            await asyncio.sleep(0.1)
             await websocket.close(1008, "expected_auth")
             return
 
@@ -2061,6 +2081,7 @@ async def main(args: Namespace) -> None:
     """
     global _WS_PORT, _USE_HTTPS, _TUNNEL_URL, _SESSION_PIN, _MOUSE_SPEED
     global _HTTP_PORT, _CLIPBOARD_AVAILABLE, _WS_URL_OVERRIDE
+    global _CLIPBOARD_LAPTOP_CHECK_TASK, _GRACE_LOCK
 
     # ── Validate + store runtime config ──────────────────────────────────
     _WS_PORT = args.ws_port

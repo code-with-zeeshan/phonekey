@@ -938,12 +938,12 @@
         authPayload = { action: "hello", tabId: myTabId };
       }
       // PIN required and no cached PIN: wait for user to enter via numpad
-      
+     
       // Include previous device_id for graceful reconnection if available
-      if (myDeviceId) {
+      if (myDeviceId && authPayload) {
         authPayload.reconnect_device_id = myDeviceId;
       }
-      
+     
       if (authPayload) {
         _reconnectAuthPayload = authPayload;
         sendPayload(authPayload);
