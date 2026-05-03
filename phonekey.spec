@@ -15,6 +15,9 @@ a = Analysis(
         # Bundle client/index.html and icon into the executable
         ("client/index.html", "client"),
         ("client/phonekey.ico", "client"),
+        # GUI launcher is a pure-Python module — included automatically,
+        # but listing it here makes the dependency explicit.
+        ("gui_launcher.py", "."),
     ],
     hiddenimports=[
         # pynput backend modules — PyInstaller can't detect these
@@ -25,13 +28,18 @@ a = Analysis(
         "pynput.mouse._win32",
         "pynput.mouse._darwin",
         "pynput.mouse._xorg",
+        # tkinter and its sub-modules must be listed explicitly
+        # because PyInstaller does not auto-detect dynamic imports
+        "tkinter",
+        "tkinter.ttk",
+        "tkinter.messagebox",
+        "_tkinter",
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
         # Exclude heavy stdlib modules we don't need
-        "tkinter",
         "unittest",
         "xml",
         "xmlrpc",
@@ -60,6 +68,9 @@ exe = EXE(
     upx=True,                              # Compress binary (smaller file) — disabled if objdump missing
     upx_exclude=[],
     runtime_tmpdir=None,
+    # ── IMPORTANT: console=True keeps the log window open AFTER
+    # the GUI launcher closes, so users can see server logs.
+    # Set to False only if you want a fully silent background process.
     console=True,                           # Keep terminal window (shows server logs)
     disable_windowed_traceback=False,
     argv_emulation=False,

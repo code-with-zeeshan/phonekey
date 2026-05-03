@@ -946,11 +946,16 @@
       reconnectDelay = RECONNECT_BASE_MS;
       setStatus("connecting", "Authenticating…");
       clearTimeout(reconnectTimer);
+
+      let authPayload;
+
+      // pk_pin is cleared on every boot(), so storedPin will always be null here.
+      // We keep this check only for mid-session reconnects (tab never closed).
      
       const storedPin = sessionStorage.getItem("pk_pin");
-      let authPayload;
-      if (storedPin) {
-        // Reconnect path: re-authenticate with the cached PIN
+
+      if (storedPin && SESSION_PIN_REQUIRED) {
+        // Mid-session reconnect: PIN was verified in this same page session
         authPayload = { action: "pin_auth", pin: storedPin, tabId: myTabId };
       } else if (!SESSION_PIN_REQUIRED) {
         // No-PIN mode: skip the overlay and handshake immediately
@@ -982,6 +987,7 @@
         case "auth_ok":
           myDeviceId = msg.device_id;
           setStatus("connected", "Connected ✓");
+          // Only cache the PIN that was actually accepted by the server
           if (pinBuffer.length === 4) {
             sessionStorage.setItem("pk_pin", pinBuffer);
           }
@@ -994,7 +1000,11 @@
           // Request clipboard history after successful authentication
           requestClipboardHistory();
           break;
-        case "auth_fail":    handleAuthFail(msg.reason); break;
+        case "auth_fail":
+          // Always wipe any cached PIN on any auth failure
+          sessionStorage.removeItem("pk_pin"); 
+          handleAuthFail(msg.reason); 
+          break;
         case "device_list":  renderDeviceList(msg.devices); break;
         case "clipboard_ack": handleClipboardAck(msg.error); break;
         case "clipboard_history": renderClipboardHistory(msg.history); break;
@@ -1083,10 +1093,17 @@
   }
   
   function handleAuthFail(reason) {
+    // Always make the PIN overlay visible so the user can retry
+    // (it may have been hidden if no-pin was assumed from a stale state)
+    pinOverlay.classList.remove("hidden");
+    mainApp.style.display = "none";
+
     for (let i = 0; i < 4; i++) document.getElementById(`pd${i}`).classList.add("error");
     document.getElementById("pin-error").textContent =
-      reason === "wrong_pin" ? "❌ Incorrect PIN — try again" : "Connection error";
-    sessionStorage.removeItem("pk_pin");   // clear stale cached PIN on failure
+      reason === "wrong_pin"          ? "❌ Incorrect PIN — try again"     :
+      reason === "pin_not_required"   ? "⚠️ Server has no PIN — reconnecting…" :
+      reason === "pin_required"       ? "⚠️ Server requires a PIN"          :
+                                        "Connection error";
     pinBuffer = "";
     setTimeout(updatePinDots, 600);
   }
@@ -1677,6 +1694,12 @@
    // ── Boot — fetch config then connect ──────────────────────────────────────
    // Fetches /api/config first so the PIN overlay decision is data-driven,
    async function boot() {
+     // ── Always clear stale cached PIN on fresh page load.
+     // A new server session always generates a new PIN, so any cached
+     // PIN from a previous session is guaranteed to be wrong.
+     // This prevents the silent "wrong PIN sent → WS closed → user PIN dropped" race.
+     sessionStorage.removeItem("pk_pin");
+
      if (myDeviceName) document.getElementById("my-name-input").value = myDeviceName;
      renderPreview();
    

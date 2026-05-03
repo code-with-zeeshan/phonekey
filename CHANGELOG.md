@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.2.1] — 2026-05-03 — Documentation & Version Fixes
+
+### Fixed
+- **Emoji Rendering**: Fixed corrupted PIN security emoji in README.md (� → 🔒)
+- **Version Consistency**: Updated all version references from 3.2.0 to 3.2.1
+
+---
+
 ## [3.2.0] — 2026-05-02 — Thread-Safety & Feature Release
 
 ### Added

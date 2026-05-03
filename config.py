@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional
 
 
 DEFAULT_CONFIG = {
-    "application": {"version": "3.2.0", "name": "PhoneKey"},
+    "application": {"version": "3.2.1", "name": "PhoneKey"},
     "network": {
         "websocket": {"port": 8765, "ping_interval": 30, "ping_timeout": 60},
         "http": {"port": 8080, "host": "0.0.0.0"},

@@ -6,7 +6,7 @@ PhoneKey runs a lightweight server on your laptop. Scan a QR code with your
 phone camera and your phone browser instantly becomes a full keyboard, trackpad,
 and clipboard bridge. No Bluetooth pairing, no app store, no cloud account.
 
-![Version](https://img.shields.io/badge/version-3.2.0-6c63ff)
+![Version](https://img.shields.io/badge/version-3.2.1-6c63ff)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
@@ -25,7 +25,7 @@ and clipboard bridge. No Bluetooth pairing, no app store, no cloud account.
 | 🎮 Macro recording | Record and playback keyboard/mouse sequences per device |
 | 🖐️ Gesture commands | Touch gestures for window management (alt-tab, show desktop, etc.) |
 | 🌐 Multi-language | English, 中文, Español UI support |
-| � PIN security | 4-digit PIN prevents unauthorised connections |
+| 🔒 PIN security | 4-digit PIN prevents unauthorised connections |
 | 🌐 Tunnel mode | Cloudflare Quick Tunnel — works across different networks |
 | 🔒 HTTPS/WSS | Self-signed certificate for encrypted local connections |
 | 📱 Multi-device | Multiple phones can connect simultaneously |
@@ -126,7 +126,7 @@ Running `python system.py` or double-clicking the `.exe` shows:
 
 ```
 ╔══════════════════════════════════════════════════════════╗
-║           📱  PhoneKey  v3.2.0  💻                       ║
+║           📱  PhoneKey  v3.2.1  💻                       ║
 ║      Use your phone as a wireless keyboard & mouse       ║
 ╚══════════════════════════════════════════════════════════╝
 
@@ -266,8 +266,8 @@ Entry point is `system.py`.
 Pushing a version tag triggers GitHub Actions to build all three platforms:
 
 ```bash
-git tag v3.2.0
-git push origin v3.2.0
+git tag v3.2.1
+git push origin v3.2.1
 ```
 
 Binaries are attached to the GitHub Release automatically.

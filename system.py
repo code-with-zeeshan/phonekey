@@ -5,7 +5,7 @@ Contract : Interactive startup configuration, CLI argument parsing,
            All server logic lives in server.py.
 """
 
-__version__ = "3.2.0"
+__version__ = "3.2.1"
 
 import argparse
 import asyncio
@@ -114,29 +114,25 @@ def _interactive_setup(args: argparse.Namespace) -> argparse.Namespace:
     Returns a fully populated Namespace.
     """
     _banner()
-
-    # Detect if we are running inside a PyInstaller bundle (double-clicked .exe)
     is_frozen = getattr(sys, "frozen", False)
-
-    print("  Choose connection mode:\n")
-    print("  [1]  Local WiFi    — phone & laptop on same network (default)")
-    print("       HTTP, no certificate warning, simplest setup")
-    print()
-    print("  [2]  Local HTTPS   — same WiFi, encrypted")
-    print("       Phone will show a one-time certificate warning")
-    print()
-    print("  [3]  Cloudflare Tunnel  — phone & laptop on ANY network")
-    print("       Secure HTTPS, no cert warning, requires internet")
-    print()
-
-    if is_frozen:
-        print("  (Type a number and press Enter. Close window to exit.)")
-    else:
-        print("  (Press Enter for default [1] or Ctrl+C to cancel)")
-    print()
 
     # ── Mode ─────────────────────────────────────────────────────────────
     if args.tunnel is None and args.https is None:
+        print("  Choose connection mode:\n")
+        print("  [1]  Local WiFi    — phone & laptop on same network (default)")
+        print("       HTTP, no certificate warning, simplest setup")
+        print()
+        print("  [2]  Local HTTPS   — same WiFi, encrypted")
+        print("       Phone will show a one-time certificate warning")
+        print()
+        print("  [3]  Cloudflare Tunnel  — phone & laptop on ANY network")
+        print("       Secure HTTPS, no cert warning, requires internet")
+        print()
+        if is_frozen:
+            print("  (Type a number and press Enter. Close window to exit.)")
+        else:
+            print("  (Press Enter for default [1] or Ctrl+C to cancel)")
+        print()
         while True:
             try:
                 choice = input("  Mode [1/2/3] → ").strip() or "1"
@@ -158,11 +154,9 @@ def _interactive_setup(args: argparse.Namespace) -> argparse.Namespace:
             else:
                 print("  Please enter 1, 2, or 3.")
     else:
-        # Flags were explicit — show what will be used
+        # Mode was given via CLI flag — show what will be used
         mode = "Cloudflare Tunnel" if args.tunnel else ("HTTPS" if args.https else "Local WiFi")
-        print(f"  Mode: {mode}  (from CLI flags)")
-
-    print()
+        print(f"  Mode: {mode}  (from CLI flags)\n")
 
     # ── PIN ──────────────────────────────────────────────────────────────
     if args.no_pin is None:
@@ -172,11 +166,10 @@ def _interactive_setup(args: argparse.Namespace) -> argparse.Namespace:
             print("\n  Cancelled.")
             sys.exit(0)
         args.no_pin = pin_input in ("n", "no")
+        print()
     else:
         status = "disabled" if args.no_pin else "enabled"
-        print(f"  PIN: {status}  (from CLI flags)")
-
-    print()
+        print(f"  PIN: {status}  (from CLI flags)\n")
 
     # ── Mouse Speed ───────────────────────────────────────────────────────
     if args.mouse_speed is None:
@@ -190,6 +183,8 @@ def _interactive_setup(args: argparse.Namespace) -> argparse.Namespace:
         print(f"  Mouse speed: {args.mouse_speed}  (from CLI flags)")
 
     # ── Clipboard Sync Direction ──────────────────────────────────────────
+    # NOTE: This block now runs for ALL modes (WiFi, HTTPS, Tunnel)
+    # whenever --clipboard-sync-direction was not explicitly passed
     if args.clipboard_sync_direction is None:
         try:
             print("  Clipboard sync direction:")
@@ -216,11 +211,9 @@ def _interactive_setup(args: argparse.Namespace) -> argparse.Namespace:
 
     print()
 
-    # ── Ports (advanced — only shown if not already set) ──────────────────
-    if args.ws_port is None:
-        args.ws_port = _DEFAULT_WS_PORT
-    if args.http_port is None:
-        args.http_port = _DEFAULT_HTTP_PORT
+    # ── Ports ──────────────────────────────────────────────────────────────
+    if args.ws_port   is None: args.ws_port   = _DEFAULT_WS_PORT
+    if args.http_port is None: args.http_port = _DEFAULT_HTTP_PORT
 
     # ── Confirm ───────────────────────────────────────────────────────────
     mode_label = (
@@ -234,6 +227,7 @@ def _interactive_setup(args: argparse.Namespace) -> argparse.Namespace:
     print(f"  Mode        : {mode_label}")
     print(f"  PIN         : {pin_label}")
     print(f"  Mouse speed : {args.mouse_speed}x")
+    print(f"  Clipboard   : {args.clipboard_sync_direction}")
     print(f"  WS port     : {args.ws_port}")
     print(f"  HTTP port   : {args.http_port}")
     print("  ────────────────────────────────────────────────")
@@ -256,12 +250,19 @@ def _interactive_setup(args: argparse.Namespace) -> argparse.Namespace:
 def _needs_interactive(args: argparse.Namespace) -> bool:
     """
     Return True if interactive setup should run.
-    Skip if --yes is set OR if all key flags were explicitly provided.
+    Skip only if --yes is set OR every single configurable option
+    was explicitly provided via CLI flags.
     """
     if args.yes:
         return False
-    # If none of the mode flags were set, show the TUI
-    return args.tunnel is None and args.https is None and args.no_pin is None
+    # If ANY option is still unset, we need interactive
+    return any([
+        args.tunnel   is None,
+        args.https    is None,
+        args.no_pin   is None,
+        args.mouse_speed is None,
+        args.clipboard_sync_direction is None,
+    ])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -306,10 +307,24 @@ def release_instance_lock() -> None:
 if __name__ == "__main__":
     args = parse_args()
 
-    # 1. Interactive setup (skipped if --yes or all flags explicit)
-    #    _interactive_setup() handles: tunnel, https, no_pin, mouse_speed,
-    #    clipboard_sync_direction, and sets defaults on error/EOF
-    if _needs_interactive(args):
+    # 1. ── GUI path — used when running as a .exe (double-clicked by non-tech user)
+    # CLI flags / --yes bypass the GUI entirely so power users are unaffected.
+    is_frozen = getattr(sys, "frozen", False)
+
+    if is_frozen and not args.yes and _needs_interactive(args):
+        # Running as bundled .exe with no CLI flags → show GUI launcher
+        from gui_launcher import run_gui
+        gui_args = run_gui()
+        if gui_args is None:
+            sys.exit(0)            # User clicked Cancel
+        # Merge: CLI flags (if any) take priority over GUI choices
+        for field in ("https", "tunnel", "no_pin", "mouse_speed",
+                      "clipboard_sync_direction", "ws_port", "http_port",
+                      "log_level", "yes"):
+            if getattr(args, field.replace("-", "_"), None) is None:
+                setattr(args, field, getattr(gui_args, field))
+    elif _needs_interactive(args):
+        # Running as script → use terminal TUI as before
         args = _interactive_setup(args)
 
     # 2. Apply defaults for any flags still None (--yes path or partial flags)
