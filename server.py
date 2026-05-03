@@ -115,7 +115,7 @@ _LAST_QR_CODE_DATA: Optional[dict] = None  # Last generated QR code data for per
 # Async locks for shared mutable state
 _CONNECTION_HISTORY_LOCK = asyncio.Lock()
 _FAVORITE_DEVICES_LOCK = asyncio.Lock()
-_CLIPBOARD_HISTORY_LOCK = asyncio.Lock()
+_CLIPBOARD_HISTORY_LOCK = threading.Lock()  # Use threading.Lock for sync contexts
 _WEBSOCKETS_LOCK = asyncio.Lock()
 
 # WebSocket connection tracking for broadcasts
@@ -243,7 +243,7 @@ async def _monitor_laptop_clipboard() -> None:
                     _CLIPBOARD_LAST_LAPTOP_CONTENT = current_content
                      
                     # Add to clipboard history (avoid duplicates)
-                    async with _CLIPBOARD_HISTORY_LOCK:
+                    with _CLIPBOARD_HISTORY_LOCK:
                         if current_content not in _CLIPBOARD_HISTORY:
                             _CLIPBOARD_HISTORY.insert(0, current_content)
                             # Keep only the most recent items
@@ -663,17 +663,21 @@ def _load_connections_data() -> None:
 
 
 def _save_connections_data() -> None:
-    """Save connection history, favorites, and QR code data to persistent storage."""
+    """Save connection history, favorites, and QR code data to persistent storage.
+    
+    NOTE: This function is called from within _CONNECTION_HISTORY_LOCK and
+    _FAVORITE_DEVICES_LOCK contexts. Do NOT acquire locks here to avoid deadlock.
+    Callers must ensure data consistency.
+    """
     global _CONNECTION_HISTORY, _FAVORITE_DEVICES, _CONNECTIONS_FILE, _LAST_QR_CODE_DATA
     
     if _CONNECTIONS_FILE is None:
         _CONNECTIONS_FILE = BASE_DIR / "connections.json"
     
     try:
-        with _CONNECTION_HISTORY_LOCK:
-            history_copy = list(_CONNECTION_HISTORY)
-        with _FAVORITE_DEVICES_LOCK:
-            favorites_copy = list(_FAVORITE_DEVICES)
+        # NOTE: Locks are NOT acquired here - callers must hold them
+        history_copy = list(_CONNECTION_HISTORY)
+        favorites_copy = list(_FAVORITE_DEVICES)
         data = {
             "history": history_copy,
             "favorites": favorites_copy,
@@ -717,131 +721,6 @@ def _add_to_connection_history(device_id: str, device_name: str) -> None:
         _CONNECTION_HISTORY.reverse()
         
         # Save to persistent storage
-        _save_connections_data()
-
-
-def _toggle_favorite(device_id: str) -> bool:
-    """Toggle a device as favorite. Returns True if now favorite, False if not."""
-    global _FAVORITE_DEVICES
-    
-    with _FAVORITE_DEVICES_LOCK:
-        if device_id in _FAVORITE_DEVICES:
-            _FAVORITE_DEVICES.remove(device_id)
-            is_favorite = False
-        else:
-            _FAVORITE_DEVICES.add(device_id)
-            is_favorite = True
-        
-        # Save to persistent storage
-        _save_connections_data()
-    
-    return is_favorite
-
-
-def _get_connection_history() -> list[dict]:
-    """Get connection history, sorted by most recent first."""
-    with _CONNECTION_HISTORY_LOCK:
-        return list(_CONNECTION_HISTORY)
-
-
-def _get_favorite_devices() -> list[str]:
-    """Get list of favorite device IDs."""
-    with _FAVORITE_DEVICES_LOCK:
-        return list(_FAVORITE_DEVICES)
-
-
-def _is_favorite(device_id: str) -> bool:
-    """Check if a device is marked as favorite."""
-    with _FAVORITE_DEVICES_LOCK:
-        return device_id in _FAVORITE_DEVICES
-
-
-# Connection history, favorites, and QR code persistence management
-def _load_connections_data() -> None:
-    """Load connection history, favorites, and QR code data from persistent storage."""
-    global _CONNECTION_HISTORY, _FAVORITE_DEVICES, _CONNECTIONS_FILE, _LAST_QR_CODE_DATA
-    
-    if _CONNECTIONS_FILE is None:
-        # Default to a connections.json file in the base directory
-        _CONNECTIONS_FILE = BASE_DIR / "connections.json"
-    
-    try:
-        if _CONNECTIONS_FILE.exists():
-            with open(_CONNECTIONS_FILE, 'r') as f:
-                data = json.load(f)
-                with _CONNECTION_HISTORY_LOCK:
-                    _CONNECTION_HISTORY = data.get("history", [])
-                with _FAVORITE_DEVICES_LOCK:
-                    _FAVORITE_DEVICES = set(data.get("favorites", []))
-                _LAST_QR_CODE_DATA = data.get("qr_code_data")
-                logger.info("📋 Loaded connection history (%d entries), favorites (%d devices), and QR code data",
-                           len(_CONNECTION_HISTORY), len(_FAVORITE_DEVICES))
-        else:
-            logger.info("📋 No existing connections file found, starting fresh")
-    except Exception as exc:
-        logger.error("❌ Failed to load connections data: %s", exc)
-        with _CONNECTION_HISTORY_LOCK:
-            _CONNECTION_HISTORY = []
-        with _FAVORITE_DEVICES_LOCK:
-            _FAVORITE_DEVICES = set()
-        _LAST_QR_CODE_DATA = None
-
-
-def _save_connections_data() -> None:
-    """Save connection history, favorites, and QR code data to persistent storage."""
-    global _CONNECTION_HISTORY, _FAVORITE_DEVICES, _CONNECTIONS_FILE, _LAST_QR_CODE_DATA
-    
-    if _CONNECTIONS_FILE is None:
-        _CONNECTIONS_FILE = BASE_DIR / "connections.json"
-    
-    try:
-        with _CONNECTION_HISTORY_LOCK:
-            history_copy = list(_CONNECTION_HISTORY)
-        with _FAVORITE_DEVICES_LOCK:
-            favorites_copy = list(_FAVORITE_DEVICES)
-        data = {
-            "history": history_copy,
-            "favorites": favorites_copy,
-            "qr_code_data": _LAST_QR_CODE_DATA
-        }
-        with open(_CONNECTIONS_FILE, 'w') as f:
-            json.dump(data, f, indent=2)
-        logger.debug("💾 Saved connection history, favorites, and QR code data")
-    except Exception as exc:
-        logger.error("❌ Failed to save connections data: %s", exc)
-
-
-def _add_to_connection_history(device_id: str, device_name: str) -> None:
-    """Add a device to connection history."""
-    global _CONNECTION_HISTORY, _MAX_CONNECTION_HISTORY
-    
-    with _CONNECTION_HISTORY_LOCK:
-        # Check if device already in history (update timestamp and move to front)
-        for entry in _CONNECTION_HISTORY:
-            if entry["id"] == device_id:
-                entry["name"] = device_name  # Update name in case it changed
-                entry["timestamp"] = datetime.now(timezone.utc).isoformat()
-                _CONNECTION_HISTORY.remove(entry)
-                break
-        else:
-            # New device entry
-            _CONNECTION_HISTORY.append({
-                "id": device_id,
-                "name": device_name,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
-        
-        # Move to front of list (most recent first)
-        _CONNECTION_HISTORY.reverse()
-        
-        # Trim to max size
-        if len(_CONNECTION_HISTORY) > _MAX_CONNECTION_HISTORY:
-            _CONNECTION_HISTORY = _CONNECTION_HISTORY[:_MAX_CONNECTION_HISTORY]
-        
-        # Reverse back to maintain chronological order (newest first)
-        _CONNECTION_HISTORY.reverse()
-        
-        # Save to persistent storage (needs to be called inside lock to ensure consistency)
         _save_connections_data()
 
 
@@ -1395,7 +1274,7 @@ async def ws_handler(websocket: websockets.WebSocketServerProtocol) -> None:
                             # Track this as laptop clipboard content for laptop→phone sync prevention
                             _CLIPBOARD_LAST_LAPTOP_CONTENT = text
                             # Add to clipboard history (avoid duplicates) - use lock
-                            async with _CLIPBOARD_HISTORY_LOCK:
+                            with _CLIPBOARD_HISTORY_LOCK:
                                 if text not in _CLIPBOARD_HISTORY:
                                     _CLIPBOARD_HISTORY.insert(0, text)
                                     # Keep only the most recent items
@@ -1483,7 +1362,7 @@ async def ws_handler(websocket: websockets.WebSocketServerProtocol) -> None:
                 continue
 
             if action == "clipboard_history":
-                async with _CLIPBOARD_HISTORY_LOCK:
+                with _CLIPBOARD_HISTORY_LOCK:
                     history_copy = _CLIPBOARD_HISTORY.copy()
                 await websocket.send(json.dumps({
                     "type": "clipboard_history",
@@ -1912,7 +1791,7 @@ def print_qr_and_url(url: str) -> None:
         print("  📷  Scan QR code with your phone camera:")
         print()
         for row in qr.get_matrix():
-            print("  " + "".join("██" if cell else "  " for cell in row))
+            print("  " + "".join("█" if cell else " " for cell in row))
     except ImportError:
         print()
         print("  ⚠️  Install qrcode for QR display: pip install qrcode")

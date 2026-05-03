@@ -76,12 +76,11 @@
       -webkit-backdrop-filter: blur(12px);
     }
 
-    .logo { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; display: flex; align-items: center; }
+    .logo { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.5px; display: flex; align-items: center; }
     .logo span { color: var(--accent); }
-    .logo-icon { font-size: 1.3rem; margin-right: 4px; }
-
+    
     .header-right { display: flex; align-items: center; gap: 8px; }
-
+    
     /* ── Theme Toggle ── */
     #theme-toggle {
       width: 28px;
@@ -101,17 +100,35 @@
    
     /* ── Language Selector ── */
     #language-select {
-      padding: 6px 10px;
+      width: 72px;
+      height: 28px;
+      padding: 4px 8px;
       border-radius: var(--radius-sm);
       border: 1px solid var(--border);
       background: var(--surface);
       color: var(--text);
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       cursor: pointer;
       transition: all var(--tr);
+      text-align: center;
+      text-align-last: center;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b6f88' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 6px center;
+      padding-right: 20px;
     }
     #language-select:hover { border-color: var(--accent); }
     #language-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent); }
+    
+    /* Firefox specific */
+    @-moz-document url-prefix() {
+      #language-select {
+        text-align: center;
+      }
+    }
 
     /* ── Status Badge ── */
     #status-badge {
@@ -486,7 +503,7 @@
 
   <!-- Sticky Header (Feature 2 — fixed while scrolling) -->
    <div id="sticky-header">
-     <div class="logo"><span class="logo-icon">🔐</span>Phone<span>Key</span></div>
+     <div class="logo">Phone<span>Key</span></div>
      <div class="header-right">
       <!-- Language selector -->
       <select id="language-select" onchange="changeLanguage(this.value)" title="Language">
@@ -1529,17 +1546,6 @@
      const el = document.getElementById("file-status");
      el.textContent = msg;
      el.className = cls;
-   }
-   
-   function handleClipboardAck(error) {
-     document.getElementById("clipboard-send").disabled = false;
-     if (error) {
-       showClipSt(`❌ ${error}`, "error");
-     } else {
-       showClipSt("✅ Sent to laptop clipboard!", "success");
-       if (_pendingPaste) { _pendingPaste=false; setTimeout(() => sendCombo("Control","v"), 150); }
-     }
-     setTimeout(() => showClipSt("",""), 3000);
    }
   
    function showClipSt(msg, cls) {
