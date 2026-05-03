@@ -1683,7 +1683,7 @@ def start_http_server(ssl_ctx: ssl.SSLContext | None) -> None:
 #  Combined HTTP+WS request handler (process_request)
 # ─────────────────────────────────────────────
 
-async def _http_process_request(path, request_headers):
+async def _http_process_request(connection,  request,):
     """
     Called by websockets for EVERY incoming request before the WS handshake.
     If the request has no 'Upgrade: websocket' header, we serve it as HTTP.
@@ -1696,7 +1696,27 @@ async def _http_process_request(path, request_headers):
     if upgrade.lower() == "websocket":
         return None   # ← proceed to ws_handler normally
 
+    path = request.path
     clean_path = path.split("?")[0]
+
+    # ── Build response helper (works for websockets 12.x) ────────────────
+    try:
+        from websockets.http11 import Response
+    except ImportError:                         # fallback for older installs
+        from websockets.datastructures import Headers as _H
+
+        class Response:                         # minimal shim
+            def __init__(self, status, headers, body):
+                self.status_code = status
+                self.headers     = _H(headers)
+                self.body        = body
+
+    def _make_response(status, headers_list, body: bytes):
+        try:
+            from websockets.datastructures import Headers
+            return Response(status, Headers(headers_list), body)
+        except Exception:
+            return Response(status, headers_list, body)
 
     # ── /api/config ──────────────────────────────────────────────────────
     if clean_path == "/api/config":
@@ -1713,22 +1733,29 @@ async def _http_process_request(path, request_headers):
                 "backoff_factor":   _RECONNECT_BACKOFF_FACTOR,
             },
         }).encode("utf-8")
-        return (HTTPStatus.OK, [
-            ("Content-Type",   "application/json"),
-            ("Content-Length", str(len(payload))),
-            ("Cache-Control",  "no-cache"),
-        ], payload)
+        return _make_response(
+            HTTPStatus.OK,
+            [("Content-Type",   "application/json"),
+             ("Content-Length", str(len(payload))),
+             ("Cache-Control",  "no-cache")],
+            payload,
+        )
 
     # ── / → redirect to /index.html ──────────────────────────────────────
     if clean_path == "/":
-        return (HTTPStatus.MOVED_PERMANENTLY, [("Location", "/index.html")], b"")
+        return _make_response(
+            HTTPStatus.MOVED_PERMANENTLY,
+            [("Location", "/index.html")],
+            b"",
+        )
 
     # ── Static files from CLIENT_DIR ─────────────────────────────────────
-    file_path = CLIENT_DIR / (clean_path.lstrip("/") or "index.html")
+    rel = clean_path.lstrip("/") or "index.html"
+    file_path = CLIENT_DIR / rel
     if not file_path.exists() or not file_path.is_file():
         file_path = CLIENT_DIR / "index.html"   # SPA fallback
     if not file_path.exists():
-        return (HTTPStatus.NOT_FOUND, [], b"Not Found")
+        return _make_response(HTTPStatus.NOT_FOUND, [], b"Not Found")
 
     suffix   = file_path.suffix.lower()
     mime_map = {
@@ -1741,11 +1768,13 @@ async def _http_process_request(path, request_headers):
     }
     mime    = mime_map.get(suffix, "application/octet-stream")
     content = file_path.read_bytes()
-    return (HTTPStatus.OK, [
-        ("Content-Type",   mime),
-        ("Content-Length", str(len(content))),
-        ("Cache-Control",  "no-cache"),
-    ], content)
+    return _make_response(
+        HTTPStatus.OK,
+        [("Content-Type",   mime),
+         ("Content-Length", str(len(content))),
+         ("Cache-Control",  "no-cache")],
+        content,
+    )
 
 # ─────────────────────────────────────────────
 #  SSL
