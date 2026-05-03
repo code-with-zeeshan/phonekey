@@ -112,9 +112,9 @@ _FAVORITE_DEVICES: set[str] = set()   # Set of favorite device IDs
 _MAX_CONNECTION_HISTORY = 50          # Maximum history entries to keep
 _CONNECTIONS_FILE: Optional[Path] = None  # File to store connections data
 _LAST_QR_CODE_DATA: Optional[dict] = None  # Last generated QR code data for persistence
-# Async locks for shared mutable state
-_CONNECTION_HISTORY_LOCK = asyncio.Lock()
-_FAVORITE_DEVICES_LOCK = asyncio.Lock()
+# Locks for shared mutable state
+_CONNECTION_HISTORY_LOCK = threading.Lock()
+_FAVORITE_DEVICES_LOCK = threading.Lock()
 _CLIPBOARD_HISTORY_LOCK = threading.Lock()  # Use threading.Lock for sync contexts
 _WEBSOCKETS_LOCK = asyncio.Lock()
 
@@ -151,7 +151,7 @@ _CURRENT_MACRO: dict[str, list] = {}       # Current macro being recorded per de
 _MAX_MACROS = 10                           # Maximum number of macros to store
 _MAX_MACRO_LENGTH = 1000                   # Maximum actions per macro
 _MACROS_FILE: Optional[Path] = None        # File to store macros
-_MACROS_LOCK = asyncio.Lock()              # Lock for macro operations
+_MACROS_LOCK = threading.Lock()              # Lock for macro operations
 
 # ─────────────────────────────────────────────
 #  Clipboard & XSS sanitization
@@ -162,9 +162,9 @@ def _sanitize_clipboard_text(text: str) -> str:
     if not text:
         return text
     return (
-        text.replace("&", "&")
-            .replace("<", "<")
-            .replace(">", ">")
+        text.replace("&", "&amp;")    # ✅ must be first to avoid double-escaping
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
             .replace('"', "&quot;")
             .replace("'", "&#x27;")
             .replace("/", "&#x2F;")
@@ -217,6 +217,8 @@ def _validate_connection_history(history: list) -> bool:
 # ─────────────────────────────────────────────
 async def _monitor_laptop_clipboard() -> None:
     """Monitor laptop clipboard for changes and push to phone when direction allows."""
+    global _CLIPBOARD_HISTORY, _CLIPBOARD_LAST_LAPTOP_CONTENT
+
     if not _CLIPBOARD_AVAILABLE:
         return
      
@@ -1075,6 +1077,7 @@ def _get_macro_details(device_id: str, macro_name: str) -> Optional[list]:
 # ─────────────────────────────────────────────
 
 async def ws_handler(websocket: websockets.WebSocketServerProtocol) -> None:
+    global _CLIPBOARD_HISTORY, _CLIPBOARD_LAST_LAPTOP_CONTENT
     client_addr = websocket.remote_address
     device_id   = str(uuid.uuid4())
     device:     ConnectedDevice | None = None
@@ -1476,7 +1479,7 @@ async def ws_handler(websocket: websockets.WebSocketServerProtocol) -> None:
                 device_id = msg.get("device_id", "")
                 macro_name = msg.get("macro_name", "")
                 if device_id and macro_name:
-                    success = _playback_macro(device_id, macro_name)
+                    success = await _playback_macro(device_id, macro_name)
                     await websocket.send(json.dumps({
                         "type": "macro_playback",
                         "success": success,
@@ -1780,18 +1783,35 @@ def print_qr_and_url(url: str) -> None:
     try:
         import qrcode
         qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            version=None,                                    # ✅ let library pick smallest version
+            error_correction=qrcode.constants.ERROR_CORRECT_L,  # smallest = fewest modules
             box_size=1,
             border=1,
         )
         qr.add_data(app_url)
         qr.make(fit=True)
+        matrix = qr.get_matrix()
+
+        # Pad to even number of rows for half-block rendering
+        if len(matrix) % 2 != 0:
+            matrix.append([False] * len(matrix[0]))
+
         print()
         print("  📷  Scan QR code with your phone camera:")
         print()
-        for row in qr.get_matrix():
-            print("  " + "".join("█" if cell else " " for cell in row))
+        # Half-block technique: encode 2 rows per terminal line → square output
+        for i in range(0, len(matrix), 2):
+            line = "  "
+            for top, bot in zip(matrix[i], matrix[i + 1]):
+                if top and bot:
+                    line += "█"   # both filled
+                elif top:
+                    line += "▀"   # top half filled
+                elif bot:
+                    line += "▄"   # bottom half filled
+                else:
+                    line += " "   # both empty
+            print(line)
     except ImportError:
         print()
         print("  ⚠️  Install qrcode for QR display: pip install qrcode")
@@ -1961,6 +1981,7 @@ async def main(args: Namespace) -> None:
     global _WS_PORT, _USE_HTTPS, _TUNNEL_URL, _SESSION_PIN, _MOUSE_SPEED
     global _HTTP_PORT, _CLIPBOARD_AVAILABLE, _WS_URL_OVERRIDE
     global _CLIPBOARD_LAPTOP_CHECK_TASK, _GRACE_LOCK
+    global _CLIPBOARD_SYNC_DIRECTION, _CLIPBOARD_LAST_LAPTOP_CONTENT
 
     # ── Validate + store runtime config ──────────────────────────────────
     _WS_PORT = args.ws_port
