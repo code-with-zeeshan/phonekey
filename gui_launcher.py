@@ -354,29 +354,107 @@ class PhoneKeyApp(tk.Tk):
         self._log_text.tag_config("SUCCESS", foreground=_SUCCESS)
 
         self._hr(body)
+        self._hr_run(body)
+        self._build_running_footer(body)
 
-        # ── Stop button ───────────────────────────────────────────────────
-        foot = tk.Frame(body, bg=_BG, pady=14)
+    # ── Stop / Restart buttons ─────────────────────────────────────────────
+    def _build_running_footer(self, parent):
+        foot = tk.Frame(parent, bg=_BG, pady=14)
         foot.pack(fill="x", padx=20)
-        tk.Button(foot, text="⏹  Stop Server",
-                  bg=_DANGER, fg="#ffffff",
-                  activebackground="#c0392b",
-                  font=("Segoe UI", 10, "bold"),
-                  relief="flat", padx=20, pady=9,
-                  cursor="hand2",
-                  command=self._on_stop).pack(side="right")
 
-        # Mark running view as ready BEFORE applying pending notifications
-        self._running_view_ready = True
+        self._restart_btn = tk.Button(
+            foot,
+            text="🔄  Restart Server",
+            bg=_WARNING, fg="#000000",
+            activebackground="#d68910",
+            activeforeground="#000000",
+            font=("Segoe UI", 10, "bold"),
+            relief="flat", padx=18, pady=9,
+            cursor="hand2",
+            command=self._on_restart,
+        )
+        self._restart_btn.pack(side="left")
 
-        # Apply anything that arrived before the view was built
+        self._stop_btn = tk.Button(
+            foot,
+            text="⏹  Stop Server",
+            bg=_DANGER, fg="#ffffff",
+            activebackground="#c0392b",
+            activeforeground="#ffffff",
+            font=("Segoe UI", 10, "bold"),
+            relief="flat", padx=18, pady=9,
+            cursor="hand2",
+            command=self._on_stop,
+        )
+        self._stop_btn.pack(side="right")
+
+    def _on_stop(self):
+        """Stop server — keep window open."""
+        self._stop_btn.config(state="disabled", text="Stopping…")
+        self._restart_btn.config(state="disabled")
+        if hasattr(self, "_status_bar"):
+            self._status_bar.config(
+                text="⏹  Server stopped. Click Restart or close window.",
+                fg=_WARNING)
+        # Signal the asyncio server to stop
+        try:
+            from server import _stop_event_ref, _loop_ref
+            if _stop_event_ref and _loop_ref:
+                _loop_ref.call_soon_threadsafe(_stop_event_ref.set)
+        except Exception:
+            pass
+        # Re-enable restart after 1 second
+        self.after(1000, lambda: self._restart_btn.config(
+            state="normal", text="🔄  Restart Server"))
+
+    def _on_restart(self):
+        """Stop current server and start a fresh one with the same args."""
+        if not hasattr(self, "_last_args"):
+            return
+        self._on_stop()
+        # Wait for server thread to finish then relaunch
+        self.after(1500, lambda: self._relaunch(self._last_args))
+
+    def _relaunch(self, args):
+        """Relaunch the server thread with the same args."""
+        import asyncio as _aio
+        from server import main as _server_main
+
+        # Reset GUI state
+        if hasattr(self, "_status_bar"):
+            self._status_bar.config(
+                text="⏳  Restarting server…", fg=_WARNING)
+        self._qr_label.config(image="", text="🔲  QR code appears once server is ready…")
+        self._url_label.config(text="")
+        self._pin_display.config(text="──────")
+        self._running_view_ready = False
+
+        # Reset pending notifications
         global _pending_pin, _pending_qr
-        if _pending_pin is not None:
-            self._apply_pin(_pending_pin)
-            _pending_pin = None
-        if _pending_qr is not None:
-            self._apply_qr(_pending_qr)
-            _pending_qr = None
+        _pending_pin = None
+        _pending_qr  = None
+
+        self._running_view_ready = True
+        self._stop_btn.config(state="normal", text="⏹  Stop Server")
+
+        self._server_thread = threading.Thread(
+            target=self._server_runner,
+            args=(args,),
+            daemon=True,
+            name="phonekey-server-restart",
+        )
+        self._server_thread.start()
+
+    def _on_close(self):
+        """Close window → stop server → exit."""
+        try:
+            from server import _stop_event_ref, _loop_ref
+            if _stop_event_ref and _loop_ref:
+                _loop_ref.call_soon_threadsafe(_stop_event_ref.set)
+        except Exception:
+            pass
+        self.after(300, self.destroy)
+        self.after(500, lambda: sys.exit(0))    
 
     # ── PIN display ───────────────────────────────────────────────────────
 
@@ -413,30 +491,52 @@ class PhoneKeyApp(tk.Tk):
             global _pending_qr
             _pending_qr = app_url
             return
+
+        qr_rendered = False
+
         try:
             import qrcode
             from PIL import Image, ImageTk
+
             qr = qrcode.QRCode(
                 version=None,
                 error_correction=qrcode.constants.ERROR_CORRECT_L,
-                box_size=5, border=2)
+                box_size=5,
+                border=2,
+            )
             qr.add_data(app_url)
             qr.make(fit=True)
-            img = qr.make_image(fill_color=_TEXT, back_color=_SURFACE)
-            img = img.resize((200, 200), Image.NEAREST)
-            self._qr_photo = ImageTk.PhotoImage(img)
+
+            # make_image() returns a PilImage when Pillow is available
+            pil_img = qr.make_image(fill_color="#e8eaf6", back_color="#1c1f2e")
+
+            # Convert to RGB so ImageTk always accepts it
+            pil_img = pil_img.convert("RGB")
+            pil_img = pil_img.resize((200, 200), Image.NEAREST)
+
+            self._qr_photo = ImageTk.PhotoImage(pil_img)
             self._qr_label.config(image=self._qr_photo, text="")
-        except Exception:
-            # PIL/qrcode not available — show text fallback
+            qr_rendered = True
+
+        except ImportError as exc:
+            log_to_gui(f"[WARNING] QR render skipped (missing library): {exc}")
+        except Exception as exc:
+            log_to_gui(f"[WARNING] QR render failed: {exc}")
+
+        if not qr_rendered:
+            # ASCII fallback — always works even without PIL
             self._qr_label.config(
-                text=f"Open in phone browser:\n{app_url}",
-                fg=_TEXT, font=("Segoe UI", 9))
+                text=f"📱 Open this URL on your phone:\n\n{app_url}",
+                fg=_TEXT,
+                font=("Segoe UI", 9),
+            )
 
         self._url_label.config(text=app_url)
         if hasattr(self, "_status_bar"):
             self._status_bar.config(
                 text="✅  Server ready — scan QR or enter URL on phone",
-                fg=_SUCCESS)
+                fg=_SUCCESS,
+            )
 
     # ── Log polling ───────────────────────────────────────────────────────
 
@@ -472,6 +572,7 @@ class PhoneKeyApp(tk.Tk):
             log_level    = "INFO",
             yes          = True,
         )
+        self._last_args = args 
         # Switch to running dashboard first, then start server thread
         self.after(0, self._show_running_view)
         self._server_thread = threading.Thread(
@@ -480,28 +581,6 @@ class PhoneKeyApp(tk.Tk):
             daemon=True,
             name="phonekey-server")
         self._server_thread.start()
-
-    def _on_stop(self):
-        """Stop the server but keep the window open showing a stopped state."""
-        self._stop_event.set()
-        if hasattr(self, "_status_bar"):
-            self._status_bar.config(
-                text="⏹  Server stopped. Close window to exit.",
-                fg=_WARNING)
-        # Signal server shutdown via the global stop mechanism
-        try:
-            from server import _stop_event_ref, _loop_ref
-            if _stop_event_ref and _loop_ref:
-                _loop_ref.call_soon_threadsafe(_stop_event_ref.set)
-        except Exception:
-            pass
-
-    def _on_close(self):
-        """Close window and exit."""
-        self._on_stop()
-        self.after(300, self.destroy)
-        self.after(400, lambda: sys.exit(0))
-
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
