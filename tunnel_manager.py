@@ -4,6 +4,7 @@ Contract : Manage the cloudflared process lifecycle (find, download, start, stop
            Returns the public tunnel URL; knows nothing about WebSocket or HTTP serving.
 """
 
+import json
 import os
 import platform
 import re
@@ -30,6 +31,41 @@ CLOUDFLARED_DOWNLOAD_BASE = (
     "https://github.com/cloudflare/cloudflared/releases/latest/download"
 )
 
+# ─────────────────────────────────────────────
+#  Persistent binary directory helper
+# ─────────────────────────────────────────────
+
+def _get_bin_dir() -> Path:
+    """
+    Return the persistent bin/ directory next to the .exe or script.
+
+    Problem this solves:
+        PyInstaller sets __file__ to a path inside sys._MEIPASS,
+        which is a TEMPORARY directory wiped after every run.
+        Using __file__ as the base means cloudflared is "installed"
+        into a folder that disappears — so it re-downloads every time.
+
+    Solution:
+        When frozen (.exe):  use the folder that CONTAINS the .exe
+                             (sys.executable.parent) — permanent location.
+        When script:         use the folder that contains tunnel_manager.py
+                             (Path(__file__).parent) — same as before.
+    """
+    if getattr(sys, "frozen", False):
+        # Running as PyInstaller .exe
+        # sys.executable = C:\Users\DELL\phonekey\phonekey.exe
+        # .parent        = C:\Users\DELL\phonekey\
+        base = Path(sys.executable).parent
+    else:
+        # Running as plain Python script
+        # __file__ = C:\Users\DELL\phonekey\tunnel_manager.py
+        # .parent  = C:\Users\DELL\phonekey\
+        base = Path(__file__).parent
+
+    bin_dir = base / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    return bin_dir
+
 
 class TunnelManager:
     """Manages the Cloudflare Quick Tunnel process lifecycle."""
@@ -39,27 +75,6 @@ class TunnelManager:
         self.process:     Optional[subprocess.Popen] = None
         self.tunnel_url:  Optional[str]              = None
         self.binary_path: Optional[Path]             = None
-
-    def _get_bin_dir() -> Path:
-        """
-        Return the persistent bin/ directory next to the .exe or script.
-        
-        PyInstaller sets sys.frozen=True and sys.executable to the actual
-        .exe path. Using sys.executable.parent means the bin/ folder sits
-        permanently next to phonekey.exe — never wiped between runs.
-        
-        In script mode, Path(__file__).parent is correct as before.
-        """
-        if getattr(sys, "frozen", False):
-            # Running as .exe — use folder containing the .exe itself
-            exe_dir = Path(sys.executable).parent
-        else:
-            # Running as script — use folder containing tunnel_manager.py
-            exe_dir = Path(__file__).parent
-        
-        bin_dir = exe_dir / "bin"
-        bin_dir.mkdir(parents=True, exist_ok=True)
-        return bin_dir    
 
     # ── Binary discovery ──────────────────────────────────────────────────
 
