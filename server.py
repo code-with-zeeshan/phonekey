@@ -2158,6 +2158,13 @@ async def main(args: Namespace) -> None:
         else f"{random.SystemRandom().randint(0, 9999):04d}"
     )
 
+    # ── NEW: send PIN to GUI panel ────────────────────────────────────────
+    try:
+        from gui_launcher import notify_pin
+        notify_pin(_SESSION_PIN)          # None → shows "Disabled" in GUI
+    except Exception:
+        pass                              # terminal mode — safe to ignore
+
     # ── Environment check ────────────────────────────────────────────────
     _check_environment()
     _check_network_environment(_HTTP_PORT)
