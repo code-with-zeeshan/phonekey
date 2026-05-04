@@ -1909,6 +1909,14 @@ def print_qr_and_url(url: str) -> None:
         "app_url": app_url,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
+
+    # ── NEW: push URL to GUI panel ────────────────────────────────────────
+    try:
+        from gui_launcher import notify_qr
+        notify_qr(app_url)
+    except Exception:
+        pass
+    
     _save_connections_data()
 
     try:

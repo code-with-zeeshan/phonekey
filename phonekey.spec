@@ -18,6 +18,8 @@ a = Analysis(
         # GUI launcher is a pure-Python module — included automatically,
         # but listing it here makes the dependency explicit.
         ("gui_launcher.py", "."),
+        ("logging_setup.py",    "."),
+        ("server.py",           "."),
     ],
     hiddenimports=[
         # pynput backend modules — PyInstaller can't detect these
@@ -34,6 +36,11 @@ a = Analysis(
         "tkinter.ttk",
         "tkinter.messagebox",
         "_tkinter",
+        "PIL",
+        "PIL.Image",
+        "PIL.ImageTk",
+        "qrcode",
+        "qrcode.image.base",
     ],
     hookspath=[],
     hooksconfig={},
@@ -68,10 +75,10 @@ exe = EXE(
     upx=True,                              # Compress binary (smaller file) — disabled if objdump missing
     upx_exclude=[],
     runtime_tmpdir=None,
-    # ── IMPORTANT: console=True keeps the log window open AFTER
-    # the GUI launcher closes, so users can see server logs.
-    # Set to False only if you want a fully silent background process.
-    console=True,                           # Keep terminal window (shows server logs)
+    # ── IMPORTANT: console=False: no black terminal flash on double-click ─────────────
+    # Logs are shown inside the GUI log panel instead.
+    # Set to True temporarily if you need to debug a crash before GUI opens.
+    console=False,                           
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

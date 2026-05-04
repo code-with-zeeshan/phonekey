@@ -623,7 +623,7 @@
         <button class="fn-btn" onclick="sendSpecial('F12')">F12</button>
       </div>
     </div>
-    <footer>PhoneKey v3.2.0 — Lightweight &amp; Local</footer>
+    <footer>PhoneKey v3.2.1 — Lightweight &amp; Local</footer>
   </div>
 
   <!-- ══ MOUSE TAB ══ -->
@@ -675,7 +675,7 @@
         <span id="speed-val">5</span>
       </div>
     </div>
-    <footer>PhoneKey v3.2.0 — Lightweight &amp; Local</footer>
+    <footer>PhoneKey v3.2.1 — Lightweight &amp; Local</footer>
   </div>
 
     <!-- ══ CLIPBOARD TAB ══ -->
@@ -709,7 +709,7 @@
          <button class="action-btn" onclick="sendCombo('Control','a')"><span class="icon">⬛</span>Ctrl+A</button>
        </div>
      </div>
-     <footer>PhoneKey v3.2.0 — Lightweight &amp; Local</footer>
+     <footer>PhoneKey v3.2.1 — Lightweight &amp; Local</footer>
    </div>
 
   <!-- ══ DEVICES TAB ══ -->
@@ -730,7 +730,7 @@
         </div>
       </div>
     </div>
-    <footer>PhoneKey v3.2.0 — Lightweight &amp; Local</footer>
+    <footer>PhoneKey v3.2.1 — Lightweight &amp; Local</footer>
   </div>
 
 </div><!-- /#main-app -->
@@ -947,12 +947,10 @@
       setStatus("connecting", "Authenticating…");
       clearTimeout(reconnectTimer);
 
-      let authPayload;
-
-      // pk_pin is cleared on every boot(), so storedPin will always be null here.
-      // We keep this check only for mid-session reconnects (tab never closed).
-     
+      // pk_pin is always cleared by boot(), so storedPin is only non-null
+      // for mid-session reconnects (tab still open, WS dropped temporarily).
       const storedPin = sessionStorage.getItem("pk_pin");
+      let authPayload;
 
       if (storedPin && SESSION_PIN_REQUIRED) {
         // Mid-session reconnect: PIN was verified in this same page session
@@ -986,6 +984,8 @@
       switch (msg.type) {
         case "auth_ok":
           myDeviceId = msg.device_id;
+          // Persist device_id in localStorage so refresh can resume session
+          localStorage.setItem("pk_device_id", myDeviceId);
           setStatus("connected", "Connected ✓");
           // Only cache the PIN that was actually accepted by the server
           if (pinBuffer.length === 4) {
@@ -1092,18 +1092,25 @@
     sendPayload({ action: "pin_auth", pin: pinBuffer, tabId: myTabId });
   }
   
+  // ── Auth failure — always restore PIN overlay so user can retry ───────────
   function handleAuthFail(reason) {
     // Always make the PIN overlay visible so the user can retry
     // (it may have been hidden if no-pin was assumed from a stale state)
     pinOverlay.classList.remove("hidden");
     mainApp.style.display = "none";
 
-    for (let i = 0; i < 4; i++) document.getElementById(`pd${i}`).classList.add("error");
+    for (let i = 0; i < 4; i++) 
+      document.getElementById(`pd${i}`).classList.add("error");
+
+    const msgs = {
+      wrong_pin:         "❌ Incorrect PIN — try again",
+      pin_not_required:  "⚠️ Server has no PIN — reconnecting…",
+      pin_required:      "⚠️ Server requires a PIN",
+      duplicate_tab:     "⚠️ Already connected in another tab",
+    };
     document.getElementById("pin-error").textContent =
-      reason === "wrong_pin"          ? "❌ Incorrect PIN — try again"     :
-      reason === "pin_not_required"   ? "⚠️ Server has no PIN — reconnecting…" :
-      reason === "pin_required"       ? "⚠️ Server requires a PIN"          :
-                                        "Connection error";
+      msgs[reason] || "Connection error — retrying…";
+      
     pinBuffer = "";
     setTimeout(updatePinDots, 600);
   }
@@ -1694,14 +1701,19 @@
    // ── Boot — fetch config then connect ──────────────────────────────────────
    // Fetches /api/config first so the PIN overlay decision is data-driven,
    async function boot() {
-     // ── Always clear stale cached PIN on fresh page load.
-     // A new server session always generates a new PIN, so any cached
-     // PIN from a previous session is guaranteed to be wrong.
-     // This prevents the silent "wrong PIN sent → WS closed → user PIN dropped" race.
-     sessionStorage.removeItem("pk_pin");
-
      if (myDeviceName) document.getElementById("my-name-input").value = myDeviceName;
      renderPreview();
+
+     // ── FIX 1: Clear stale PIN on every fresh page load.
+     // sessionStorage persists within a tab but some mobile browsers
+     // (iOS Safari) clear it on refresh. We always wipe it so a new
+     // server session's PIN is never blocked by a cached old PIN.
+     sessionStorage.removeItem("pk_pin");
+
+     // ── FIX 2: Restore device_id from localStorage for grace-period
+     // reconnection across refreshes (survives hard refresh).
+     const storedDeviceId = localStorage.getItem("pk_device_id");
+     if (storedDeviceId) myDeviceId = storedDeviceId;
    
       // 1. Fetch server config — determines PIN requirement AND WebSocket URL
       let wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${WS_PORT}`;
@@ -1721,7 +1733,6 @@
           // use it — otherwise fall back to the default LAN calculation
           if (cfg.ws_url) {
             wsUrl = cfg.ws_url;
-            console.log("[PhoneKey] Using tunnel WS URL:", wsUrl);
           }
           
           // Store clipboard sync direction for UI adaptation

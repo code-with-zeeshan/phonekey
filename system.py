@@ -307,57 +307,59 @@ def release_instance_lock() -> None:
 if __name__ == "__main__":
     args = parse_args()
 
-    # 1. ── GUI path — used when running as a .exe (double-clicked by non-tech user)
-    # CLI flags / --yes bypass the GUI entirely so power users are unaffected.
     is_frozen = getattr(sys, "frozen", False)
+    # On Linux / macOS running the script directly also gets the GUI
+    # unless --yes or explicit flags are provided.
+    use_gui = _needs_interactive(args)
 
-    if is_frozen and not args.yes and _needs_interactive(args):
-        # Running as bundled .exe with no CLI flags → show GUI launcher
-        from gui_launcher import run_gui
-        gui_args = run_gui()
-        if gui_args is None:
-            sys.exit(0)            # User clicked Cancel
-        # Merge: CLI flags (if any) take priority over GUI choices
-        for field in ("https", "tunnel", "no_pin", "mouse_speed",
-                      "clipboard_sync_direction", "ws_port", "http_port",
-                      "log_level", "yes"):
-            if getattr(args, field.replace("-", "_"), None) is None:
-                setattr(args, field, getattr(gui_args, field))
-    elif _needs_interactive(args):
-        # Running as script → use terminal TUI as before
-        args = _interactive_setup(args)
+    if use_gui:
+        try:
+            import tkinter as _tk_test
+            _tk_test.Tk().destroy()        # test display is available
+            _tk_available = True
+        except Exception:
+            _tk_available = False
 
-    # 2. Apply defaults for any flags still None (--yes path or partial flags)
-    #    This handles flags not covered by _interactive_setup (ws_port, http_port)
-    #    and provides safety net for all flags
-    if args.ws_port    is None: args.ws_port    = _DEFAULT_WS_PORT
-    if args.http_port  is None: args.http_port  = _DEFAULT_HTTP_PORT
-    if args.https      is None: args.https      = False
-    if args.no_pin     is None: args.no_pin     = False
-    if args.mouse_speed is None: args.mouse_speed = 1.0
-    if args.tunnel     is None: args.tunnel     = False
-    if args.clipboard_sync_direction is None: args.clipboard_sync_direction = "phone_to_laptop"
+        if _tk_available:
+            from gui_launcher import run_gui
+            gui_args = run_gui()
+            if gui_args is None:
+                sys.exit(0)                # user cancelled
+            # Merge: explicit CLI flags win over GUI choices
+            for field in vars(gui_args):
+                if getattr(args, field, None) is None:
+                    setattr(args, field, getattr(gui_args, field))
+        else:
+            # No display (headless server) — fall back to terminal TUI
+            args = _interactive_setup(args)
+    else:
+        if _needs_interactive(args):
+            args = _interactive_setup(args)
 
-    # 3. Logging must be ready before server.py is imported
+    # Apply defaults for anything still None
+    if args.ws_port                  is None: args.ws_port   = _DEFAULT_WS_PORT
+    if args.http_port                is None: args.http_port = _DEFAULT_HTTP_PORT
+    if args.https                    is None: args.https     = False
+    if args.no_pin                   is None: args.no_pin    = False
+    if args.mouse_speed              is None: args.mouse_speed = 1.0
+    if args.tunnel                   is None: args.tunnel    = False
+    if args.clipboard_sync_direction is None:
+        args.clipboard_sync_direction = "phone_to_laptop"
+
     log = setup_logging(level=args.log_level)
 
-    # 4. Windows Ctrl+C — register BEFORE asyncio.run()
-    #    We use a threading.Event so the callback works from any thread
     if sys.platform == "win32":
         import threading
         _win_stop_flag = threading.Event()
-
         def _win_stop_cb():
             log.info("🛑 Ctrl+C detected — shutting down…")
             _win_stop_flag.set()
-
         _setup_win_ctrl(_win_stop_cb)
 
-    # 5. Prevent duplicate processes
     acquire_instance_lock(args.ws_port)
 
+    # Notify GUI of QR URL once server is ready (server.py calls this)
     try:
-        # 6. Import server only after logging is configured
         from server import main
         asyncio.run(main(args))
     except KeyboardInterrupt:
