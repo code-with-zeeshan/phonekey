@@ -529,26 +529,33 @@ _MAX_CONNECTION_ATTEMPTS = 10  # Max attempts per window
 _CONNECTION_RATE_WINDOW = 60  # Time window in seconds
 
 
-def _check_rate_limit(client_addr: tuple[str, int]) -> bool:
-    """Check if client IP has exceeded connection rate limit. Returns True if allowed."""
-    ip = client_addr[0]
+def _get_real_ip(client_addr: tuple, headers=None) -> str:
+    """
+    Returns real client IP.
+    Cloudflare tunnel puts real IP in cf-connecting-ip header.
+    Falls back to socket addr for direct connections.
+    """
+    if headers:
+        cf_ip = headers.get("cf-connecting-ip") or headers.get("x-forwarded-for", "")
+        if cf_ip:
+            return cf_ip.split(",")[0].strip()
+    return client_addr[0]
+
+
+def _check_rate_limit(client_addr: tuple, headers=None) -> bool:
+    """Check connection rate. Uses real IP for tunnel connections."""
+    ip  = _get_real_ip(client_addr, headers)
     now = datetime.now(timezone.utc).timestamp()
-    
+
     with _CONNECTION_RATE_LOCK:
         if ip not in _CONNECTION_ATTEMPTS:
             _CONNECTION_ATTEMPTS[ip] = []
-        
-        # Remove old attempts outside the window
         _CONNECTION_ATTEMPTS[ip] = [
-            ts for ts in _CONNECTION_ATTEMPTS[ip]
-            if now - ts < _CONNECTION_RATE_WINDOW
+            t for t in _CONNECTION_ATTEMPTS[ip]
+            if now - t < _CONNECTION_RATE_WINDOW
         ]
-        
-        # Check if limit exceeded
         if len(_CONNECTION_ATTEMPTS[ip]) >= _MAX_CONNECTION_ATTEMPTS:
             return False
-        
-        # Record this attempt
         _CONNECTION_ATTEMPTS[ip].append(now)
         return True
 
@@ -1679,136 +1686,129 @@ def start_http_server(ssl_ctx: ssl.SSLContext | None) -> None:
     logger.info("🌐 %s server → port %d", proto, _HTTP_PORT)
     httpd.serve_forever()
 
-# ─────────────────────────────────────────────
-#  Combined HTTP+WS request handler (process_request)
-#  Dual-API: works with BOTH websockets legacy (path, headers)
-#            AND websockets 12.x new (connection, request) signatures.
-#  The Cloudflare tunnel path routes through websockets.legacy.server,
-#  while direct local connections may use the new server — so we must
-#  detect which API is active at call time.
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+#  Combined HTTP + WebSocket request handler
+#  Supports websockets legacy API (path:str, headers:Headers)
+#         AND websockets 12.x new API (connection, request)
+#  Detection uses attribute access, not isinstance — works in all modes
+#  including Cloudflare tunnel, local HTTP, and local HTTPS.
+# ─────────────────────────────────────────────────────────────────────────────
 
 async def _http_process_request(*args):
     """
-    Handles both websockets API variants transparently:
+    Normalises two completely different websockets calling conventions:
 
-    Legacy API  →  process_request(path: str, request_headers: Headers)
-    New 12.x    →  process_request(connection, request)
-                   where request has .path and .headers attributes
+    Legacy (tunnel / some WS builds):
+        _http_process_request(path: str, request_headers: Headers)
+        Must return: (HTTPStatus, [(header,val),...], body_bytes)  or None
 
-    Detection:  if args[0] is a plain str  → legacy
-                otherwise                  → new 12.x
+    New 12.x (local HTTP / HTTPS):
+        _http_process_request(connection: ServerConnection, request: Request)
+        Must return: websockets.http11.Response  or None
+
+    Strategy: try to read .path from args[1]; if that succeeds it's the new
+    API. If args[0] is a plain str it's the legacy API. A bare except catches
+    every edge case so the server never crashes on a bad handshake.
     """
     from http import HTTPStatus
 
-    # ── 1. Detect API variant and normalise to (path, headers) ───────────
-    if isinstance(args[0], str):
-        # ── Legacy API: (path: str, request_headers: Headers) ─────────────
-        path            = args[0]
-        request_headers = args[1]        # already a Headers-like object
-        _legacy         = True
-    else:
-        # ── New 12.x API: (connection, request) ───────────────────────────
-        request         = args[1]
-        path            = request.path
-        request_headers = request.headers
-        _legacy         = False
+    try:
+        # ── Detect API variant ────────────────────────────────────────────
+        if isinstance(args[0], str):
+            # Legacy API: (path, Headers)
+            path            = args[0]
+            request_headers = args[1]
+            legacy          = True
+        else:
+            # New 12.x API: (ServerConnection, Request)
+            request         = args[1]
+            path            = request.path
+            request_headers = request.headers
+            legacy          = False
 
-    # ── 2. WebSocket upgrade → let websockets handle the handshake ────────
-    upgrade = request_headers.get("Upgrade", "")
-    if upgrade.lower() == "websocket":
+        # ── WebSocket upgrade — let websockets handle the handshake ───────
+        if request_headers.get("Upgrade", "").lower() == "websocket":
+            return None
+
+        clean = path.split("?")[0]
+
+        # ── Route ─────────────────────────────────────────────────────────
+        if clean == "/api/config":
+            body = json.dumps({
+                "pin_required":             _SESSION_PIN is not None,
+                "version":                  __version__,
+                "ws_url":                   _WS_URL_OVERRIDE,
+                "ws_port":                  _HTTP_PORT,
+                "clipboard_sync_direction": _CLIPBOARD_SYNC_DIRECTION,
+                "reconnect": {
+                    "grace_seconds":  _RECONNECT_GRACE_SECONDS,
+                    "base_delay_ms":  _RECONNECT_BASE_DELAY_MS,
+                    "max_delay_ms":   _RECONNECT_MAX_DELAY_MS,
+                    "backoff_factor": _RECONNECT_BACKOFF_FACTOR,
+                },
+            }).encode("utf-8")
+            return _ws_response(HTTPStatus.OK, [
+                ("Content-Type",   "application/json"),
+                ("Content-Length", str(len(body))),
+                ("Cache-Control",  "no-cache"),
+            ], body, legacy)
+
+        if clean == "/":
+            return _ws_response(
+                HTTPStatus.MOVED_PERMANENTLY,
+                [("Location", "/index.html")],
+                b"", legacy)
+
+        rel       = clean.lstrip("/") or "index.html"
+        file_path = CLIENT_DIR / rel
+        if not file_path.exists() or not file_path.is_file():
+            file_path = CLIENT_DIR / "index.html"
+        if not file_path.exists():
+            return _ws_response(HTTPStatus.NOT_FOUND,
+                                [("Content-Type", "text/plain")],
+                                b"Not Found", legacy)
+
+        mime = {
+            ".html": "text/html; charset=utf-8",
+            ".css":  "text/css",
+            ".js":   "application/javascript",
+            ".ico":  "image/x-icon",
+            ".png":  "image/png",
+            ".svg":  "image/svg+xml",
+        }.get(file_path.suffix.lower(), "application/octet-stream")
+
+        content = file_path.read_bytes()
+        return _ws_response(HTTPStatus.OK, [
+            ("Content-Type",   mime),
+            ("Content-Length", str(len(content))),
+            ("Cache-Control",  "no-cache"),
+        ], content, legacy)
+
+    except Exception as exc:
+        # Never let this handler crash the WS server
+        logger.error("HTTP handler error: %s", exc)
         return None
 
-    clean_path = path.split("?")[0]
 
-    # ── 3. Build response body ────────────────────────────────────────────
-
-    # /api/config
-    if clean_path == "/api/config":
-        body = json.dumps({
-            "pin_required":             _SESSION_PIN is not None,
-            "version":                  __version__,
-            "ws_url":                   _WS_URL_OVERRIDE,
-            "ws_port":                  _HTTP_PORT,
-            "clipboard_sync_direction": _CLIPBOARD_SYNC_DIRECTION,
-            "reconnect": {
-                "grace_seconds":  _RECONNECT_GRACE_SECONDS,
-                "base_delay_ms":  _RECONNECT_BASE_DELAY_MS,
-                "max_delay_ms":   _RECONNECT_MAX_DELAY_MS,
-                "backoff_factor": _RECONNECT_BACKOFF_FACTOR,
-            },
-        }).encode("utf-8")
-        return _make_ws_response(
-            HTTPStatus.OK,
-            [("Content-Type",   "application/json"),
-             ("Content-Length", str(len(body))),
-             ("Cache-Control",  "no-cache")],
-            body,
-            _legacy,
-        )
-
-    # / → redirect
-    if clean_path == "/":
-        return _make_ws_response(
-            HTTPStatus.MOVED_PERMANENTLY,
-            [("Location", "/index.html")],
-            b"",
-            _legacy,
-        )
-
-    # Static files
-    rel       = clean_path.lstrip("/") or "index.html"
-    file_path = CLIENT_DIR / rel
-    if not file_path.exists() or not file_path.is_file():
-        file_path = CLIENT_DIR / "index.html"   # SPA fallback
-    if not file_path.exists():
-        return _make_ws_response(
-            HTTPStatus.NOT_FOUND,
-            [("Content-Type", "text/plain")],
-            b"Not Found",
-            _legacy,
-        )
-
-    suffix   = file_path.suffix.lower()
-    mime_map = {
-        ".html": "text/html; charset=utf-8",
-        ".css":  "text/css",
-        ".js":   "application/javascript",
-        ".ico":  "image/x-icon",
-        ".png":  "image/png",
-        ".svg":  "image/svg+xml",
-    }
-    mime    = mime_map.get(suffix, "application/octet-stream")
-    content = file_path.read_bytes()
-    return _make_ws_response(
-        HTTPStatus.OK,
-        [("Content-Type",   mime),
-         ("Content-Length", str(len(content))),
-         ("Cache-Control",  "no-cache")],
-        content,
-        _legacy,
-    )
-
-
-def _make_ws_response(status, headers_list: list, body: bytes, legacy: bool):
+def _ws_response(status, headers: list, body: bytes, legacy: bool):
     """
-    Return the correct response object for the active websockets API.
+    Build the correct response object for the active websockets API.
 
-    Legacy path  → plain (status, headers_list, body) tuple
-    New 12.x     → websockets.http11.Response  (or datastructures shim)
+    Legacy path → plain (status, list[tuple], bytes) tuple.
+    New 12.x    → websockets.http11.Response object.
+
+    Falls back gracefully if the import fails (older websockets builds).
     """
     if legacy:
-        # websockets legacy server accepts a raw tuple
-        return (status, headers_list, body)
+        return (status, headers, body)
 
-    # New 12.x server requires a Response object
     try:
         from websockets.http11 import Response
-        from websockets.datastructures import Headers
-        return Response(status, Headers(headers_list), body)
+        from websockets.datastructures import Headers as WsHeaders
+        return Response(status, WsHeaders(headers), body)
     except ImportError:
-        # Absolute fallback: return legacy tuple (websockets will usually accept it)
-        return (status, headers_list, body)
+        # websockets build doesn't have http11 module — use tuple fallback
+        return (status, headers, body)
 
 # ─────────────────────────────────────────────
 #  SSL
@@ -2081,6 +2081,33 @@ def _check_environment() -> None:
     logger.info("✅ Environment: %s | Backend: %s",
                 sys.platform, backend_map.get(sys.platform, sys.platform))
 
+def _check_network_environment(port: int) -> None:
+    """Log environment diagnostics once on startup."""
+    import socket as _s
+    # Check if port is already in use
+    with _s.socket(_s.AF_INET, _s.SOCK_STREAM) as sock:
+        result = sock.connect_ex(("127.0.0.1", port))
+        if result == 0:
+            logger.warning("⚠️  Port %d is already in use by another process", port)
+
+    # Check if we're behind a corporate proxy
+    proxy = (os.environ.get("HTTPS_PROXY") or
+             os.environ.get("HTTP_PROXY") or
+             os.environ.get("http_proxy"))
+    if proxy:
+        logger.warning("⚠️  HTTP proxy detected (%s) — tunnel mode may not work", proxy)
+
+    # Check available network interfaces
+    hostname = _s.gethostname()
+    try:
+        local_ip = _s.gethostbyname(hostname)
+        if local_ip.startswith("127."):
+            logger.warning("⚠️  Only loopback interface found — phone cannot reach this server")
+        else:
+            logger.info("🌐 LAN IP: %s — phone must be on same WiFi", local_ip)
+    except Exception:
+        logger.warning("⚠️  Could not resolve local IP")
+
 # ─────────────────────────────────────────────
 #  Signal Setup
 # ─────────────────────────────────────────────
@@ -2133,6 +2160,7 @@ async def main(args: Namespace) -> None:
 
     # ── Environment check ────────────────────────────────────────────────
     _check_environment()
+    _check_network_environment(_HTTP_PORT)
 
     # ── pynput ───────────────────────────────────────────────────────────
     global keyboard, mouse

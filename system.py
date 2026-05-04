@@ -11,7 +11,8 @@ import argparse
 import asyncio
 import errno
 import socket
-import sys
+import subprocess, sys
+from argparse import Namespace
 
 from logging_setup import setup_logging
 
@@ -49,6 +50,23 @@ if sys.platform == "win32":
         _win_handler_ref = _WinHandler(_handler)   # keep ref — prevents GC
         ctypes.windll.kernel32.SetConsoleCtrlHandler(_win_handler_ref, True)
 
+# In system.py, call once on first run (Windows only)
+def _ensure_firewall_rule(port: int) -> None:
+    """Add Windows Firewall inbound rule for PhoneKey if not already present."""
+    if sys.platform != "win32":
+        return
+    check = subprocess.run(
+        ["netsh", "advfirewall", "firewall", "show", "rule", "name=PhoneKey Server"],
+        capture_output=True, text=True
+    )
+    if "No rules match" in check.stdout or check.returncode != 0:
+        subprocess.run([
+            "netsh", "advfirewall", "firewall", "add", "rule",
+            "name=PhoneKey Server",
+            "dir=in", "action=allow", "protocol=TCP",
+            f"localport={port}",
+            "profile=private,domain", "enable=yes"
+        ], capture_output=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CLI
