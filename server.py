@@ -1909,15 +1909,14 @@ def print_qr_and_url(url: str) -> None:
         "app_url": app_url,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
+    _save_connections_data()
 
-    # ── NEW: push URL to GUI panel ────────────────────────────────────────
+    # ── Push QR URL to GUI panel (no-op if running in terminal mode) ──────
     try:
         from gui_launcher import notify_qr
         notify_qr(app_url)
     except Exception:
-        pass
-    
-    _save_connections_data()
+        pass                            # GUI not running — safe to ignore
 
     try:
         import qrcode

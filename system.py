@@ -307,63 +307,95 @@ def release_instance_lock() -> None:
 if __name__ == "__main__":
     args = parse_args()
 
+    # ── Decide launch path ────────────────────────────────────────────────
+    # GUI path:  only when running as a frozen .exe AND no CLI flags given
+    # TUI path:  python system.py  (script mode, always)
     is_frozen = getattr(sys, "frozen", False)
-    # On Linux / macOS running the script directly also gets the GUI
-    # unless --yes or explicit flags are provided.
-    use_gui = _needs_interactive(args)
 
-    if use_gui:
-        try:
-            import tkinter as _tk_test
-            _tk_test.Tk().destroy()        # test display is available
-            _tk_available = True
-        except Exception:
-            _tk_available = False
+    if is_frozen and _needs_interactive(args):
+        # ── .exe double-click → GUI ───────────────────────────────────────
+        # Apply safe defaults for anything not set via CLI before GUI opens.
+        if args.ws_port   is None: args.ws_port   = _DEFAULT_WS_PORT
+        if args.http_port is None: args.http_port = _DEFAULT_HTTP_PORT
 
-        if _tk_available:
-            from gui_launcher import run_gui
-            gui_args = run_gui()
-            if gui_args is None:
-                sys.exit(0)                # user cancelled
-            # Merge: explicit CLI flags win over GUI choices
+        # logging must exist before server.py is imported
+        log = setup_logging(level=args.log_level)
+
+        if sys.platform == "win32":
+            import threading as _th
+            def _win_stop_cb():
+                log.info("🛑 Ctrl+C detected — shutting down…")
+            _setup_win_ctrl(_win_stop_cb)
+
+        acquire_instance_lock(args.ws_port)
+
+        from server import main as _server_main
+
+        def _run_server(gui_args: Namespace):
+            """
+            Called in a daemon thread by the GUI when user clicks Start.
+            Merges GUI-provided args with any explicit CLI flags.
+            """
+            import asyncio as _aio
+            # Fill anything still None from GUI choices
             for field in vars(gui_args):
                 if getattr(args, field, None) is None:
                     setattr(args, field, getattr(gui_args, field))
-        else:
-            # No display (headless server) — fall back to terminal TUI
+            # Final safety defaults
+            if args.https  is None: args.https  = False
+            if args.tunnel is None: args.tunnel = False
+            if args.no_pin is None: args.no_pin = False
+            if args.mouse_speed is None: args.mouse_speed = 1.0
+            if args.clipboard_sync_direction is None:
+                args.clipboard_sync_direction = "phone_to_laptop"
+            try:
+                _aio.run(_server_main(args))
+            except Exception as exc:
+                log.error("Server error: %s", exc)
+
+        try:
+            from gui_launcher import run_gui
+            run_gui(_run_server)       # blocks until window closed
+        except Exception as exc:
+            log.error("GUI failed: %s — falling back to TUI", exc)
             args = _interactive_setup(args)
+            import asyncio
+            asyncio.run(_server_main(args))
+
+        release_instance_lock()
+        log.info("✅ PhoneKey stopped cleanly.")
+
     else:
+        # ── python system.py → terminal TUI (original behaviour) ─────────
         if _needs_interactive(args):
             args = _interactive_setup(args)
 
-    # Apply defaults for anything still None
-    if args.ws_port                  is None: args.ws_port   = _DEFAULT_WS_PORT
-    if args.http_port                is None: args.http_port = _DEFAULT_HTTP_PORT
-    if args.https                    is None: args.https     = False
-    if args.no_pin                   is None: args.no_pin    = False
-    if args.mouse_speed              is None: args.mouse_speed = 1.0
-    if args.tunnel                   is None: args.tunnel    = False
-    if args.clipboard_sync_direction is None:
-        args.clipboard_sync_direction = "phone_to_laptop"
+        # Apply defaults
+        if args.ws_port                  is None: args.ws_port   = _DEFAULT_WS_PORT
+        if args.http_port                is None: args.http_port = _DEFAULT_HTTP_PORT
+        if args.https                    is None: args.https     = False
+        if args.no_pin                   is None: args.no_pin    = False
+        if args.mouse_speed              is None: args.mouse_speed = 1.0
+        if args.tunnel                   is None: args.tunnel    = False
+        if args.clipboard_sync_direction is None:
+            args.clipboard_sync_direction = "phone_to_laptop"
 
-    log = setup_logging(level=args.log_level)
+        log = setup_logging(level=args.log_level)
 
-    if sys.platform == "win32":
-        import threading
-        _win_stop_flag = threading.Event()
-        def _win_stop_cb():
-            log.info("🛑 Ctrl+C detected — shutting down…")
-            _win_stop_flag.set()
-        _setup_win_ctrl(_win_stop_cb)
+        if sys.platform == "win32":
+            import threading as _th
+            def _win_stop_cb():
+                log.info("🛑 Ctrl+C detected — shutting down…")
+            _setup_win_ctrl(_win_stop_cb)
 
-    acquire_instance_lock(args.ws_port)
+        acquire_instance_lock(args.ws_port)
 
-    # Notify GUI of QR URL once server is ready (server.py calls this)
-    try:
-        from server import main
-        asyncio.run(main(args))
-    except KeyboardInterrupt:
-        pass
-    finally:
-        release_instance_lock()
-        log.info("✅ PhoneKey stopped cleanly.")
+        try:
+            from server import main
+            import asyncio
+            asyncio.run(main(args))
+        except KeyboardInterrupt:
+            pass
+        finally:
+            release_instance_lock()
+            log.info("✅ PhoneKey stopped cleanly.")
